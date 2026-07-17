@@ -1,0 +1,57 @@
+export type LogLevel = 'info' | 'warn' | 'error';
+
+interface LogEntry {
+  time: number;
+  level: LogLevel;
+  message: string;
+}
+
+const MAX_ENTRIES = 300;
+const MAX_VISIBLE = 16;
+const entries: LogEntry[] = [];
+
+let logEl: HTMLElement | null = null;
+let statsEl: HTMLElement | null = null;
+
+export function initDebugPanel(logPanel: HTMLElement, statsPanel: HTMLElement) {
+  logEl = logPanel;
+  statsEl = statsPanel;
+  renderLog();
+}
+
+export function log(level: LogLevel, message: string) {
+  entries.push({ time: performance.now(), level, message });
+  if (entries.length > MAX_ENTRIES) entries.shift();
+
+  const prefix = `[${(performance.now() / 1000).toFixed(2)}s]`;
+  if (level === 'error') console.error(prefix, message);
+  else if (level === 'warn') console.warn(prefix, message);
+  else console.log(prefix, message);
+
+  renderLog();
+}
+
+function renderLog() {
+  if (!logEl) return;
+  logEl.textContent = entries
+    .slice(-MAX_VISIBLE)
+    .map((e) => `[${(e.time / 1000).toFixed(2)}] ${e.level.toUpperCase()}: ${e.message}`)
+    .join('\n');
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+export function updateStats(lines: string[]) {
+  if (statsEl) statsEl.textContent = lines.join('\n');
+}
+
+/** Surface exceptions that would otherwise silently die inside a
+ * requestAnimationFrame callback (the browser only prints these to devtools
+ * console, easy to miss when debugging over a screenshot). */
+export function installGlobalErrorLogging() {
+  window.addEventListener('error', (e) => {
+    log('error', `${e.message} @ ${e.filename}:${e.lineno}:${e.colno}`);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    log('error', `Unhandled promise rejection: ${String(e.reason)}`);
+  });
+}

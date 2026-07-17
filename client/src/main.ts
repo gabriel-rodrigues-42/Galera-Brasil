@@ -3,7 +3,11 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { buildHub, ROOM_HALF, HUB_EXIT_ZONE, type Interactable } from './hub-builder';
 import { demoHub } from './hub-content';
 import type { HubPost } from './hub-types';
+import { log, initDebugPanel, updateStats, installGlobalErrorLogging } from './logger';
 import './style.css';
+
+installGlobalErrorLogging();
+log('info', 'main.ts starting');
 
 // --- Renderer / Scene / Camera -------------------------------------------------
 
@@ -12,6 +16,14 @@ const overlay = document.querySelector<HTMLDivElement>('#overlay')!;
 const hintEl = document.querySelector<HTMLDivElement>('#interact-hint')!;
 const panelEl = document.querySelector<HTMLDivElement>('#post-panel')!;
 const panelContentEl = document.querySelector<HTMLDivElement>('#post-panel-content')!;
+const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
+const debugStatsEl = document.querySelector<HTMLPreElement>('#debug-stats')!;
+const debugLogEl = document.querySelector<HTMLPreElement>('#debug-log')!;
+initDebugPanel(debugLogEl, debugStatsEl);
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Backquote') debugPanelEl.classList.toggle('hidden');
+});
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.shadowMap.enabled = true;
@@ -27,6 +39,7 @@ function resizeRenderer() {
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+  log('info', `resizeRenderer: ${width}x${height} (canvas rect now ${canvas.getBoundingClientRect().width}x${canvas.getBoundingClientRect().height})`);
 }
 
 const scene = new THREE.Scene();
@@ -227,16 +240,30 @@ controls.maxPolarAngle = Math.PI / 2 + MAX_PITCH_FROM_HORIZON;
 
 // The overlay sits visually on top of the canvas while visible, so it (not
 // the canvas) is what actually receives the click that should engage pointer lock.
-overlay.addEventListener('click', () => controls.lock());
+overlay.addEventListener('click', () => {
+  log('info', `overlay clicked, requesting pointer lock (document.hasFocus=${document.hasFocus()}, visibilityState=${document.visibilityState})`);
+  controls.lock();
+});
 controls.addEventListener('lock', () => {
   overlay.classList.add('hidden');
   document.body.classList.add('locked');
+  log(
+    'info',
+    `pointer lock ENGAGED — camera pos=(${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)}) ` +
+      `rot(yaw,pitch deg)=(${THREE.MathUtils.radToDeg(camera.rotation.y).toFixed(1)}, ${THREE.MathUtils.radToDeg(camera.rotation.x).toFixed(1)}) scene.children=${scene.children.length}`,
+  );
 });
 controls.addEventListener('unlock', () => {
   overlay.classList.remove('hidden');
   document.body.classList.remove('locked');
   hintEl.classList.add('hidden');
   closePostPanel();
+  log('info', 'pointer lock RELEASED');
+});
+// PointerLockControls logs this to console itself but doesn't expose it as a
+// subscribable event, so hook the native event directly to get it on-screen too.
+document.addEventListener('pointerlockerror', () => {
+  log('error', 'pointerlockerror: browser refused the pointer lock request');
 });
 
 const keys: Record<string, boolean> = {};
@@ -338,11 +365,13 @@ function openPostPanel(post: HubPost) {
   panelContentEl.innerHTML = renderPostPanel(post);
   panelEl.classList.remove('hidden');
   velocity.set(0, 0, 0);
+  log('info', `post panel opened: ${post.type}/${post.id}`);
 }
 
 function closePostPanel() {
   openPost = null;
   panelEl.classList.add('hidden');
+  log('info', 'post panel closed');
 }
 
 function enterHub() {
@@ -356,6 +385,7 @@ function enterHub() {
   );
   camera.rotation.set(0, builtHub.spawnYaw, 0);
   velocity.set(0, 0, 0);
+  log('info', `entered hub — teleported to (${controls.object.position.x.toFixed(2)}, ${controls.object.position.y.toFixed(2)}, ${controls.object.position.z.toFixed(2)})`);
 }
 
 function exitHub() {
@@ -363,6 +393,7 @@ function exitHub() {
   controls.object.position.copy(lastPlazaTransform.position);
   camera.rotation.set(0, lastPlazaTransform.yaw, 0);
   velocity.set(0, 0, 0);
+  log('info', `exited hub — restored to (${controls.object.position.x.toFixed(2)}, ${controls.object.position.y.toFixed(2)}, ${controls.object.position.z.toFixed(2)})`);
 }
 
 function updateInteraction() {
@@ -423,16 +454,51 @@ function updateInteraction() {
 const timer = new THREE.Timer();
 timer.connect(document); // zero-out delta while the tab is hidden, instead of a huge catch-up jump
 
+let prevYaw = camera.rotation.y;
+let prevPitch = camera.rotation.x;
+let fps = 0;
+let fpsFrameCount = 0;
+let fpsAccum = 0;
+
 function animate(timestamp: number) {
   requestAnimationFrame(animate);
   timer.update(timestamp);
   const delta = Math.min(timer.getDelta(), 0.1);
+
+  fpsFrameCount++;
+  fpsAccum += delta;
+  if (fpsAccum >= 0.5) {
+    fps = fpsFrameCount / fpsAccum;
+    fpsFrameCount = 0;
+    fpsAccum = 0;
+  }
+
   if (controls.isLocked) {
     updateMovement(delta);
     updateInteraction();
+
+    // Flag any single-frame rotation big enough to plausibly explain "camera
+    // suddenly stuck looking at the sky" — e.g. a cursor-warp artifact right
+    // after requestPointerLock(), rather than a deliberate mouse move.
+    const yawDeltaDeg = THREE.MathUtils.radToDeg(camera.rotation.y - prevYaw);
+    const pitchDeltaDeg = THREE.MathUtils.radToDeg(camera.rotation.x - prevPitch);
+    if (Math.abs(yawDeltaDeg) > 60 || Math.abs(pitchDeltaDeg) > 30) {
+      log('warn', `Large single-frame rotation jump: yaw Δ=${yawDeltaDeg.toFixed(1)}° pitch Δ=${pitchDeltaDeg.toFixed(1)}°`);
+    }
   }
+  prevYaw = camera.rotation.y;
+  prevPitch = camera.rotation.x;
+
+  updateStats([
+    `mode=${mode}  locked=${controls.isLocked}  fps=${fps.toFixed(0)}`,
+    `pos=(${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`,
+    `rot yaw=${THREE.MathUtils.radToDeg(camera.rotation.y).toFixed(1)}°  pitch=${THREE.MathUtils.radToDeg(camera.rotation.x).toFixed(1)}°`,
+    `scene.children=${scene.children.length}  openPost=${openPost ? openPost.id : 'none'}`,
+  ]);
+
   beacon.rotation.y += delta * 1.2;
   renderer.render(scene, camera);
 }
 
+log('info', `initial camera pos=(${camera.position.x}, ${camera.position.y}, ${camera.position.z}) scene.children=${scene.children.length}`);
 animate(performance.now());
