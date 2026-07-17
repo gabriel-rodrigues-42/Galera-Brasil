@@ -61,6 +61,7 @@ const gmBtnToggleBuildEl = document.querySelector<HTMLButtonElement>('#gm-btn-to
 const gmSelectBuildTypeEl = document.querySelector<HTMLSelectElement>('#gm-select-build-type')!;
 const builderStatusEl = document.querySelector<HTMLDivElement>('#builder-status')!;
 const builderStatusItemEl = document.querySelector<HTMLElement>('#builder-status-item')!;
+const gmPlacedListEl = document.querySelector<HTMLDivElement>('#gm-placed-list')!;
 
 initDebugPanel(debugLogEl, debugStatsEl);
 
@@ -465,6 +466,7 @@ joinFormEl.addEventListener('submit', (e) => {
           disposeObject3D(target);
           const idx = gmPlacedObjects.indexOf(target);
           if (idx !== -1) gmPlacedObjects.splice(idx, 1);
+          updatePlacedObjectsList();
         }
       };
 
@@ -474,6 +476,7 @@ joinFormEl.addEventListener('submit', (e) => {
           disposeObject3D(obj);
         });
         gmPlacedObjects.length = 0;
+        updatePlacedObjectsList();
       };
 
       // Load initial placed objects from database
@@ -486,6 +489,7 @@ joinFormEl.addEventListener('submit', (e) => {
             spawnObjectAt(obj.type as BuildType, pos, obj.id);
           });
           log('info', `loaded ${objects.length} placed objects from DB`);
+          updatePlacedObjectsList();
         })
         .catch((err) => log('error', `failed to load initial placed objects: ${err}`));
 
@@ -665,6 +669,7 @@ function openGmPanel() {
   velocity.set(0, 0, 0);
   releasePointerForUI();
   ghostGroup.visible = false; // Hide ghost when menu is open
+  updatePlacedObjectsList();
   log('info', 'GM builder panel opened');
 }
 
@@ -753,6 +758,79 @@ function updateGhostVisual() {
   }
 }
 
+function updatePlacedObjectsList() {
+  gmPlacedListEl.innerHTML = '';
+
+  if (gmPlacedObjects.length === 0) {
+    const emptyEl = document.createElement('p');
+    emptyEl.className = 'empty-list-text';
+    emptyEl.textContent = 'Nenhum objeto colocado ainda.';
+    gmPlacedListEl.appendChild(emptyEl);
+    return;
+  }
+
+  const emojiMap: Record<BuildType, string> = {
+    tree: '🌳 Árvore',
+    canopy: '☀️ Tenda Solar',
+    rock: '🪨 Rocha',
+    plank: '🪵 Bloco',
+    lily: '🪷 Vitória Régia',
+  };
+
+  const sortedObjs = [...gmPlacedObjects].sort((a, b) => {
+    const distA = camera.position.distanceTo(a.position);
+    const distB = camera.position.distanceTo(b.position);
+    return distA - distB;
+  });
+
+  sortedObjs.forEach((obj) => {
+    const type = (obj.userData.type || 'tree') as BuildType;
+    const nameLabel = emojiMap[type] || type;
+    const coordsStr = `(${obj.position.x.toFixed(1)}, ${obj.position.z.toFixed(1)})`;
+    const dist = camera.position.distanceTo(obj.position);
+    const distStr = `${dist.toFixed(1)}m`;
+
+    const itemEl = document.createElement('div');
+    itemEl.className = 'gm-placed-item';
+
+    const detailsEl = document.createElement('div');
+    detailsEl.className = 'gm-placed-item-details';
+
+    const labelEl = document.createElement('span');
+    labelEl.textContent = nameLabel;
+    detailsEl.appendChild(labelEl);
+
+    const coordsEl = document.createElement('span');
+    coordsEl.className = 'gm-placed-item-coords';
+    coordsEl.textContent = `${coordsStr} · dist: ${distStr}`;
+    detailsEl.appendChild(coordsEl);
+
+    itemEl.appendChild(detailsEl);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'gm-placed-item-delete';
+    deleteBtn.textContent = 'Remover';
+    deleteBtn.type = 'button';
+
+    deleteBtn.addEventListener('click', () => {
+      const idToDelete = obj.name;
+      scene.remove(obj);
+      disposeObject3D(obj);
+      const idx = gmPlacedObjects.indexOf(obj);
+      if (idx !== -1) gmPlacedObjects.splice(idx, 1);
+
+      api.deletePlacedObject(idToDelete).catch((err) => log('error', `failed to delete: ${err}`));
+      network.sendObjectRemoved(idToDelete);
+
+      log('info', `GM broke object ${idToDelete} via list at ${coordsStr}`);
+      updatePlacedObjectsList();
+    });
+
+    itemEl.appendChild(deleteBtn);
+    gmPlacedListEl.appendChild(itemEl);
+  });
+}
+
 function spawnObjectAt(type: BuildType, pos: THREE.Vector3, id?: string) {
   let obj: THREE.Object3D;
   if (type === 'tree') {
@@ -795,6 +873,7 @@ function spawnObjectAt(type: BuildType, pos: THREE.Vector3, id?: string) {
 
   const finalId = id || self.crypto.randomUUID();
   obj.name = finalId;
+  obj.userData.type = type;
   gmPlacedObjects.push(obj);
 
   if (!id) {
@@ -810,6 +889,7 @@ function spawnObjectAt(type: BuildType, pos: THREE.Vector3, id?: string) {
     'info',
     `GM placed object: ${type} (id=${finalId}) at (${pos.x.toFixed(2)}, ${pos.z.toFixed(2)})`
   );
+  updatePlacedObjectsList();
 }
 
 gmBtnToggleBuildEl.addEventListener('click', () => {
@@ -895,6 +975,7 @@ window.addEventListener('mousedown', (e) => {
           'info',
           `GM broke object ${idToDelete} at (${target.position.x.toFixed(2)}, ${target.position.z.toFixed(2)})`
         );
+        updatePlacedObjectsList();
       }
     }
   }
