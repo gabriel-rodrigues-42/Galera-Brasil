@@ -91,3 +91,35 @@ export function claimNpcSticker(
     }
   );
 }
+
+export interface PlacedObjectRecord {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+  z: number;
+}
+
+export function listPlacedObjects(): Promise<PlacedObjectRecord[]> {
+  return apiFetch('/api/placed-objects');
+}
+
+export function addPlacedObject(obj: PlacedObjectRecord): Promise<PlacedObjectRecord> {
+  return apiFetch('/api/placed-objects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(obj),
+  });
+}
+
+export function deletePlacedObject(id: string): Promise<{ success: boolean }> {
+  return apiFetch(`/api/placed-objects/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export function clearPlacedObjects(): Promise<{ success: boolean }> {
+  return apiFetch('/api/placed-objects', {
+    method: 'DELETE',
+  });
+}

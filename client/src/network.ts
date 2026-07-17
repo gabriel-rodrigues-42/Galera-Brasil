@@ -1,5 +1,6 @@
 import { Client, Room, getStateCallbacks } from 'colyseus.js';
 import { log } from './logger';
+import type { PlacedObjectRecord } from './api';
 
 export interface RemotePlayerState {
   name: string;
@@ -35,6 +36,9 @@ export class Network {
   onSystem: (text: string) => void = () => {};
   onHubAdded: (event: HubAddedEvent) => void = () => {};
   onDisconnected: (reason: string) => void = () => {};
+  onObjectPlaced: (event: PlacedObjectRecord) => void = () => {};
+  onObjectRemoved: (id: string) => void = () => {};
+  onObjectsCleared: () => void = () => {};
 
   constructor(serverUrl: string) {
     this.client = new Client(serverUrl);
@@ -67,6 +71,9 @@ export class Network {
     this.room.onMessage('chat', (data: ChatEvent) => this.onChat(data));
     this.room.onMessage('system', (data: { text: string }) => this.onSystem(data.text));
     this.room.onMessage('hub_added', (data: HubAddedEvent) => this.onHubAdded(data));
+    this.room.onMessage('object_placed', (data: PlacedObjectRecord) => this.onObjectPlaced(data));
+    this.room.onMessage('object_removed', (data: { id: string }) => this.onObjectRemoved(data.id));
+    this.room.onMessage('objects_cleared', () => this.onObjectsCleared());
 
     this.room.onLeave((code: number) => {
       log('warn', `disconnected from server (code=${code})`);
@@ -84,6 +91,18 @@ export class Network {
 
   sendChat(text: string) {
     this.room?.send('chat', { text });
+  }
+
+  sendObjectPlaced(obj: PlacedObjectRecord) {
+    this.room?.send('object_placed', obj);
+  }
+
+  sendObjectRemoved(id: string) {
+    this.room?.send('object_removed', { id });
+  }
+
+  sendObjectsCleared() {
+    this.room?.send('objects_cleared');
   }
 }
 

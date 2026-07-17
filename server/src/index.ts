@@ -13,6 +13,10 @@ import {
   getRandomNpcDialogue,
   getPlayerStickers,
   claimNpcSticker,
+  listPlacedObjects,
+  addPlacedObject,
+  deletePlacedObject,
+  clearPlacedObjects,
 } from './db';
 
 const app = express();
@@ -57,6 +61,31 @@ app.get('/api/players/:playerName/stickers', (req, res) => {
 app.post('/api/players/:playerName/stickers/claim/:npcType', (req, res) => {
   const result = claimNpcSticker(req.params.playerName, req.params.npcType as any);
   res.json(result);
+});
+
+// --- Placed Objects API (Builder Mode) ------------------------------------------
+
+app.get('/api/placed-objects', (_req, res) => {
+  res.json(listPlacedObjects());
+});
+
+app.post('/api/placed-objects', (req, res) => {
+  const { id, type, x, y, z } = req.body;
+  if (!id || !type || typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') {
+    return res.status(400).json({ error: 'invalid placed object payload' });
+  }
+  const obj = addPlacedObject(id, type, x, y, z);
+  res.json(obj);
+});
+
+app.delete('/api/placed-objects/:id', (req, res) => {
+  deletePlacedObject(req.params.id);
+  res.json({ success: true });
+});
+
+app.delete('/api/placed-objects', (_req, res) => {
+  clearPlacedObjects();
+  res.json({ success: true });
 });
 
 // Serve the built client (Phase 2+: this becomes a CDN/static host instead,

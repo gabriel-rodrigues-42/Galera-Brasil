@@ -38,6 +38,14 @@ db.exec(`
     last_claimed_at INTEGER NOT NULL,
     PRIMARY KEY (player_name, npc_type)
   );
+  CREATE TABLE IF NOT EXISTS placed_objects (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    z REAL NOT NULL,
+    created_at INTEGER NOT NULL
+  );
 `);
 
 // Pre-populate NPC content if empty
@@ -384,4 +392,43 @@ export function claimNpcSticker(
     success: true,
     sticker: randomSticker,
   };
+}
+
+export interface PlacedObject {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+  z: number;
+  created_at: number;
+}
+
+export function listPlacedObjects(): PlacedObject[] {
+  return db
+    .prepare('SELECT id, type, x, y, z, created_at FROM placed_objects ORDER BY created_at ASC')
+    .all() as unknown as PlacedObject[];
+}
+
+export function addPlacedObject(
+  id: string,
+  type: string,
+  x: number,
+  y: number,
+  z: number
+): PlacedObject {
+  const now = Date.now();
+  db.prepare(
+    'INSERT OR REPLACE INTO placed_objects (id, type, x, y, z, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(id, type, x, y, z, now);
+  return { id, type, x, y, z, created_at: now };
+}
+
+export function deletePlacedObject(id: string): boolean {
+  db.prepare('DELETE FROM placed_objects WHERE id = ?').run(id);
+  return true;
+}
+
+export function clearPlacedObjects(): boolean {
+  db.prepare('DELETE FROM placed_objects').run();
+  return true;
 }

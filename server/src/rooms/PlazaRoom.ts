@@ -72,6 +72,18 @@ export class PlazaRoom extends Room<PlazaState> {
       });
     });
 
+    this.onMessage('object_placed', (client, message) => {
+      this.broadcast('object_placed', message, { except: client });
+    });
+
+    this.onMessage('object_removed', (client, message) => {
+      this.broadcast('object_removed', message, { except: client });
+    });
+
+    this.onMessage('objects_cleared', (client) => {
+      this.broadcast('objects_cleared', {}, { except: client });
+    });
+
     console.log(`[PlazaRoom] created (${this.roomId})`);
   }
 

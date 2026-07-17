@@ -451,6 +451,44 @@ joinFormEl.addEventListener('submit', (e) => {
       gmHelpBadgeEl.classList.remove('hidden');
       requestLock();
 
+      // Listen for other players placing/removing objects in real-time
+      network.onObjectPlaced = (event) => {
+        if (gmPlacedObjects.some((o) => o.name === event.id)) return;
+        const pos = new THREE.Vector3(event.x, event.y, event.z);
+        spawnObjectAt(event.type as BuildType, pos, event.id);
+      };
+
+      network.onObjectRemoved = (id) => {
+        const target = gmPlacedObjects.find((o) => o.name === id);
+        if (target) {
+          scene.remove(target);
+          disposeObject3D(target);
+          const idx = gmPlacedObjects.indexOf(target);
+          if (idx !== -1) gmPlacedObjects.splice(idx, 1);
+        }
+      };
+
+      network.onObjectsCleared = () => {
+        gmPlacedObjects.forEach((obj) => {
+          scene.remove(obj);
+          disposeObject3D(obj);
+        });
+        gmPlacedObjects.length = 0;
+      };
+
+      // Load initial placed objects from database
+      api
+        .listPlacedObjects()
+        .then((objects) => {
+          objects.forEach((obj) => {
+            if (gmPlacedObjects.some((o) => o.name === obj.id)) return;
+            const pos = new THREE.Vector3(obj.x, obj.y, obj.z);
+            spawnObjectAt(obj.type as BuildType, pos, obj.id);
+          });
+          log('info', `loaded ${objects.length} placed objects from DB`);
+        })
+        .catch((err) => log('error', `failed to load initial placed objects: ${err}`));
+
       api
         .getPlayerStickers(name)
         .then((stickers) => {
@@ -715,7 +753,7 @@ function updateGhostVisual() {
   }
 }
 
-function spawnObjectAt(type: BuildType, pos: THREE.Vector3) {
+function spawnObjectAt(type: BuildType, pos: THREE.Vector3, id?: string) {
   let obj: THREE.Object3D;
   if (type === 'tree') {
     obj = makeTree(pos.x, pos.z, 1.0);
@@ -754,8 +792,24 @@ function spawnObjectAt(type: BuildType, pos: THREE.Vector3) {
     scene.add(mesh);
     obj = mesh;
   }
+
+  const finalId = id || self.crypto.randomUUID();
+  obj.name = finalId;
   gmPlacedObjects.push(obj);
-  log('info', `GM placed object: ${type} at (${pos.x.toFixed(2)}, ${pos.z.toFixed(2)})`);
+
+  if (!id) {
+    // Locally placed by the player, persist to database and broadcast to other players
+    const payload = { id: finalId, type, x: pos.x, y: pos.y, z: pos.z };
+    api
+      .addPlacedObject(payload)
+      .catch((err) => log('error', `failed to persist placed object: ${err}`));
+    network.sendObjectPlaced(payload);
+  }
+
+  log(
+    'info',
+    `GM placed object: ${type} (id=${finalId}) at (${pos.x.toFixed(2)}, ${pos.z.toFixed(2)})`
+  );
 }
 
 gmBtnToggleBuildEl.addEventListener('click', () => {
@@ -825,13 +879,21 @@ window.addEventListener('mousedown', (e) => {
         target = target.parent;
       }
       if (target) {
+        const idToDelete = target.name;
         scene.remove(target);
         disposeObject3D(target);
         const idx = gmPlacedObjects.indexOf(target);
         if (idx !== -1) gmPlacedObjects.splice(idx, 1);
+
+        // Delete from database and broadcast removal
+        api
+          .deletePlacedObject(idToDelete)
+          .catch((err) => log('error', `failed to delete placed object from DB: ${err}`));
+        network.sendObjectRemoved(idToDelete);
+
         log(
           'info',
-          `GM broke object at (${target.position.x.toFixed(2)}, ${target.position.z.toFixed(2)})`
+          `GM broke object ${idToDelete} at (${target.position.x.toFixed(2)}, ${target.position.z.toFixed(2)})`
         );
       }
     }
@@ -882,6 +944,10 @@ gmBtnAllEl.addEventListener('click', () => {
     disposeObject3D(obj);
   });
   gmPlacedObjects.length = 0;
+
+  // Clear database and broadcast clear
+  api.clearPlacedObjects().catch((err) => log('error', `failed to clear placed objects: ${err}`));
+  network.sendObjectsCleared();
 
   log('info', 'GM triggered full world respawn');
 });
