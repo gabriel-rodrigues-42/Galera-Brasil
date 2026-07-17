@@ -87,7 +87,12 @@ export function getOrCreateHub(rawOwner: string): HubRecord {
     randomUUID(),
     owner,
     'text',
-    JSON.stringify({ title: 'Bem-vindo(a)!', body: `Este é o hub de ${owner}. Use N para adicionar um post aqui dentro.` }),
+    JSON.stringify({
+      title: 'Bem-vindo(a)!',
+      // Shown to every visitor, not just the owner — no "press N" instruction
+      // here, since that only works for the owner and would mislead guests.
+      body: `Este é o hub de ${owner} na Galera Brasil.`,
+    }),
     Date.now(),
   );
   return getHub(owner)!;

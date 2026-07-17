@@ -267,7 +267,7 @@ joinFormEl.addEventListener('submit', (e) => {
       joinFormEl.classList.add('hidden');
       joinStatusEl.textContent = '';
       resumeBlockEl.classList.remove('hidden');
-      controls.lock();
+      requestLock();
     })
     .catch((err) => {
       log('error', `failed to connect: ${err}`);
@@ -277,6 +277,23 @@ joinFormEl.addEventListener('submit', (e) => {
     });
 });
 
+// `controls.lock()` fires-and-forgets `canvas.requestPointerLock()` without
+// capturing the promise it returns, so any rejection (e.g. Chrome's ~1.3s
+// cooldown after exiting a lock — SecurityError if you re-click too soon)
+// surfaces only as an unhandled rejection. Call requestPointerLock ourselves
+// so we can catch it and give the player visible feedback instead.
+function requestLock() {
+  canvas.requestPointerLock().catch((err: DOMException) => {
+    log('warn', `pointer lock request rejected: ${err.name} — ${err.message}`);
+    if (err.name === 'SecurityError') {
+      joinStatusEl.textContent = 'Aguarde um instante e clique novamente.';
+      setTimeout(() => {
+        if (joinStatusEl.textContent === 'Aguarde um instante e clique novamente.') joinStatusEl.textContent = '';
+      }, 2000);
+    }
+  });
+}
+
 // The overlay sits visually on top of the canvas while visible, so it (not
 // the canvas) is what actually receives the click that should engage pointer
 // lock — only meaningful once already connected (the join form handles the
@@ -284,7 +301,7 @@ joinFormEl.addEventListener('submit', (e) => {
 overlay.addEventListener('click', (e) => {
   if (!connected || e.target === nameInputEl || (e.target as HTMLElement).closest('#join-form')) return;
   log('info', `overlay clicked, requesting pointer lock (document.hasFocus=${document.hasFocus()}, visibilityState=${document.visibilityState})`);
-  controls.lock();
+  requestLock();
 });
 controls.addEventListener('lock', () => {
   overlay.classList.add('hidden');
