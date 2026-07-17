@@ -119,6 +119,26 @@
               <span class="btn-icon">🔄</span> Respawnar Tudo
             </button>
           </div>
+          <!-- Builder Mode settings -->
+          <div class="gm-builder-mode-section">
+            <h3>Modo de Construção</h3>
+            <div class="gm-toggle-container">
+              <label>Construção Ativa:</label>
+              <button type="button" id="gm-btn-toggle-build" class="gm-toggle-btn">
+                Desativado
+              </button>
+            </div>
+            <div class="gm-build-select-container">
+              <label for="gm-select-build-type">Objeto:</label>
+              <select id="gm-select-build-type">
+                <option value="tree">🌳 Árvore</option>
+                <option value="canopy">☀️ Tenda Solar</option>
+                <option value="rock">🪨 Rocha</option>
+                <option value="plank">🪵 Bloco de Madeira</option>
+                <option value="lily">🪷 Vitória Régia</option>
+              </select>
+            </div>
+          </div>
           <div class="gm-panel-actions">
             <button type="button" id="gm-panel-close">Fechar</button>
           </div>
@@ -126,6 +146,13 @@
             Atalho: Pressione <strong>B</strong> para abrir/fechar · Esc para fechar
           </p>
         </div>
+      </div>
+      <!-- Builder Mode Status Overlay -->
+      <div id="builder-status" class="hidden">
+        <span>Modo Construção: <strong id="builder-status-item">🌳 Árvore</strong></span>
+        <span class="builder-status-hint"
+          >· [Botão Esquerdo] Colocar · [Botão Direito] Apagar · [B] Menu</span
+        >
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

@@ -56,6 +56,12 @@ const gmBtnCanopiesEl = document.querySelector<HTMLButtonElement>('#gm-btn-canop
 const gmBtnLakeEl = document.querySelector<HTMLButtonElement>('#gm-btn-lake')!;
 const gmBtnAllEl = document.querySelector<HTMLButtonElement>('#gm-btn-all')!;
 
+// Builder Mode UI selectors
+const gmBtnToggleBuildEl = document.querySelector<HTMLButtonElement>('#gm-btn-toggle-build')!;
+const gmSelectBuildTypeEl = document.querySelector<HTMLSelectElement>('#gm-select-build-type')!;
+const builderStatusEl = document.querySelector<HTMLDivElement>('#builder-status')!;
+const builderStatusItemEl = document.querySelector<HTMLElement>('#builder-status-item')!;
+
 initDebugPanel(debugLogEl, debugStatsEl);
 
 window.addEventListener('keydown', (e) => {
@@ -353,6 +359,10 @@ let myName = '';
 let openPost: HubPost | null = null;
 let openNpc: NpcDef | null = null;
 let gmPanelOpen = false;
+type BuildType = 'tree' | 'canopy' | 'rock' | 'plank' | 'lily';
+let currentBuildType: BuildType = 'tree';
+let builderModeActive = false;
+const gmPlacedObjects: THREE.Object3D[] = [];
 let stickersCollected: string[] = [];
 const lastPlazaTransform = { position: new THREE.Vector3(0, 1.7, 8), yaw: 0 };
 
@@ -616,6 +626,7 @@ function openGmPanel() {
   gmPanelEl.classList.remove('hidden');
   velocity.set(0, 0, 0);
   releasePointerForUI();
+  ghostGroup.visible = false; // Hide ghost when menu is open
   log('info', 'GM builder panel opened');
 }
 
@@ -638,6 +649,199 @@ gmHelpBadgeEl.addEventListener('click', () => {
 gmPanelCloseEl.addEventListener('click', () => {
   closeGmPanel();
   resumeAfterUI();
+});
+
+// --- Builder Mode: Minecraft-style placement & raycasting preview --------------
+
+const ghostGroup = new THREE.Group();
+ghostGroup.visible = false;
+scene.add(ghostGroup);
+
+const ghostMaterial = new THREE.MeshBasicMaterial({
+  color: 0x81b29a,
+  transparent: true,
+  opacity: 0.4,
+  wireframe: true,
+});
+
+function updateGhostVisual() {
+  while (ghostGroup.children.length > 0) {
+    const child = ghostGroup.children[0];
+    ghostGroup.remove(child);
+    if (child instanceof THREE.Mesh) {
+      child.geometry?.dispose();
+    }
+  }
+
+  if (currentBuildType === 'tree') {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 1.4, 8), ghostMaterial);
+    trunk.position.y = 0.7;
+    ghostGroup.add(trunk);
+
+    for (let i = 0; i < 3; i++) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(0.9 - i * 0.15, 8, 8), ghostMaterial);
+      puff.position.y = 1.6 + i * 0.55;
+      ghostGroup.add(puff);
+    }
+  } else if (currentBuildType === 'canopy') {
+    const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.6, 6);
+    const offsets: [number, number][] = [
+      [-1.6, -1.1],
+      [1.6, -1.1],
+      [-1.6, 1.1],
+      [1.6, 1.1],
+    ];
+    for (const [ox, oz] of offsets) {
+      const pole = new THREE.Mesh(poleGeo, ghostMaterial);
+      pole.position.set(ox, 1.3, oz);
+      ghostGroup.add(pole);
+    }
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.08, 2.6), ghostMaterial);
+    panel.position.y = 2.7;
+    ghostGroup.add(panel);
+  } else if (currentBuildType === 'rock') {
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5), ghostMaterial);
+    rock.position.y = 0.35;
+    ghostGroup.add(rock);
+  } else if (currentBuildType === 'plank') {
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.4, 1.5), ghostMaterial);
+    plank.position.y = 0.2;
+    ghostGroup.add(plank);
+  } else if (currentBuildType === 'lily') {
+    const lily = new THREE.Mesh(new THREE.CircleGeometry(0.4, 8), ghostMaterial);
+    lily.rotation.x = -Math.PI / 2;
+    lily.position.y = 0.02;
+    ghostGroup.add(lily);
+  }
+}
+
+function spawnObjectAt(type: BuildType, pos: THREE.Vector3) {
+  let obj: THREE.Object3D;
+  if (type === 'tree') {
+    obj = makeTree(pos.x, pos.z, 1.0);
+    scene.add(obj);
+  } else if (type === 'canopy') {
+    obj = makeSolarCanopy(pos.x, pos.z, 0);
+    scene.add(obj);
+  } else if (type === 'rock') {
+    const rockGeo = new THREE.DodecahedronGeometry(0.5);
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
+    const mesh = new THREE.Mesh(rockGeo, rockMat);
+    mesh.scale.set(1.1, 0.8, 1.1);
+    mesh.position.set(pos.x, 0.5 * 0.35, pos.z);
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    obj = mesh;
+  } else if (type === 'plank') {
+    const plankGeo = new THREE.BoxGeometry(1.5, 0.4, 1.5);
+    const plankMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.9 });
+    const mesh = new THREE.Mesh(plankGeo, plankMat);
+    mesh.position.set(pos.x, 0.2, pos.z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    obj = mesh;
+  } else {
+    // lily
+    const lilyGeo = new THREE.CircleGeometry(0.4, 8);
+    const lilyMat = new THREE.MeshStandardMaterial({ color: 0x3d8c40, roughness: 0.8 });
+    const mesh = new THREE.Mesh(lilyGeo, lilyMat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(pos.x, 0.02, pos.z);
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    obj = mesh;
+  }
+  gmPlacedObjects.push(obj);
+  log('info', `GM placed object: ${type} at (${pos.x.toFixed(2)}, ${pos.z.toFixed(2)})`);
+}
+
+gmBtnToggleBuildEl.addEventListener('click', () => {
+  builderModeActive = !builderModeActive;
+  if (builderModeActive) {
+    gmBtnToggleBuildEl.textContent = 'Ativado';
+    gmBtnToggleBuildEl.classList.add('active');
+    builderStatusEl.classList.remove('hidden');
+    updateGhostVisual();
+
+    // Close GM menu and lock mouse to start building
+    closeGmPanel();
+    resumeAfterUI();
+  } else {
+    gmBtnToggleBuildEl.textContent = 'Desativado';
+    gmBtnToggleBuildEl.classList.remove('active');
+    builderStatusEl.classList.add('hidden');
+
+    // Clear ghost visual
+    ghostGroup.visible = false;
+    while (ghostGroup.children.length > 0) {
+      const child = ghostGroup.children[0];
+      ghostGroup.remove(child);
+      if (child instanceof THREE.Mesh) child.geometry?.dispose();
+    }
+  }
+});
+
+gmSelectBuildTypeEl.addEventListener('change', () => {
+  currentBuildType = gmSelectBuildTypeEl.value as BuildType;
+
+  // Update UI text in status bar
+  const emojiMap: Record<BuildType, string> = {
+    tree: '🌳 Árvore',
+    canopy: '☀️ Tenda Solar',
+    rock: '🪨 Rocha',
+    plank: '🪵 Bloco de Madeira',
+    lily: '🪷 Vitória Régia',
+  };
+  builderStatusItemEl.textContent = emojiMap[currentBuildType];
+
+  if (builderModeActive) {
+    updateGhostVisual();
+  }
+});
+
+// Mouse events for placing / breaking
+window.addEventListener('mousedown', (e) => {
+  if (!controls.isLocked || !builderModeActive) return;
+
+  // Left Click (button 0): Spawn
+  if (e.button === 0 && ghostGroup.visible) {
+    e.preventDefault();
+    spawnObjectAt(currentBuildType, ghostGroup.position);
+  }
+
+  // Right Click (button 2): Break
+  if (e.button === 2) {
+    e.preventDefault();
+    camera.getWorldPosition(raycastOrigin);
+    camera.getWorldDirection(raycastDir);
+    raycaster.set(raycastOrigin, raycastDir);
+    const hits = raycaster.intersectObjects(gmPlacedObjects, true);
+    if (hits.length > 0 && hits[0].distance <= 25) {
+      let target: THREE.Object3D | null = hits[0].object;
+      while (target && !gmPlacedObjects.includes(target)) {
+        target = target.parent;
+      }
+      if (target) {
+        scene.remove(target);
+        disposeObject3D(target);
+        const idx = gmPlacedObjects.indexOf(target);
+        if (idx !== -1) gmPlacedObjects.splice(idx, 1);
+        log(
+          'info',
+          `GM broke object at (${target.position.x.toFixed(2)}, ${target.position.z.toFixed(2)})`
+        );
+      }
+    }
+  }
+});
+
+window.addEventListener('contextmenu', (e) => {
+  if (controls.isLocked && builderModeActive) {
+    e.preventDefault();
+  }
 });
 
 gmBtnNpcsEl.addEventListener('click', () => {
@@ -671,6 +875,14 @@ gmBtnAllEl.addEventListener('click', () => {
   spawnSolarCanopies();
   clearLake();
   spawnLake();
+
+  // Clean up all GM-placed builder objects
+  gmPlacedObjects.forEach((obj) => {
+    scene.remove(obj);
+    disposeObject3D(obj);
+  });
+  gmPlacedObjects.length = 0;
+
   log('info', 'GM triggered full world respawn');
 });
 
@@ -1210,6 +1422,21 @@ function animate(timestamp: number) {
     updateMovement(delta);
     updateInteraction();
 
+    if (builderModeActive) {
+      camera.getWorldPosition(raycastOrigin);
+      camera.getWorldDirection(raycastDir);
+      raycaster.set(raycastOrigin, raycastDir);
+      const hits = raycaster.intersectObjects([grass, plaza]);
+      if (hits.length > 0 && hits[0].distance <= 25) {
+        ghostGroup.position.copy(hits[0].point);
+        ghostGroup.visible = true;
+      } else {
+        ghostGroup.visible = false;
+      }
+    } else {
+      ghostGroup.visible = false;
+    }
+
     sendAccum += delta;
     if (connected && sendAccum >= SEND_INTERVAL) {
       sendAccum = 0;
@@ -1238,6 +1465,8 @@ function animate(timestamp: number) {
         `Large single-frame rotation jump: yaw Δ=${yawDeltaDeg.toFixed(1)}° pitch Δ=${pitchDeltaDeg.toFixed(1)}°`
       );
     }
+  } else {
+    ghostGroup.visible = false;
   }
   prevYaw = camera.rotation.y;
   prevPitch = camera.rotation.x;
