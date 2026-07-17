@@ -117,6 +117,77 @@ plaza.position.y = 0.01;
 plaza.receiveShadow = true;
 scene.add(plaza);
 
+// --- Lake & Path to the Main Park (Plaza) ---------------------------------------
+
+// A sand path connecting the plaza to the lake
+const lakePath = new THREE.Mesh(
+  new THREE.BoxGeometry(3, 0.01, 14),
+  new THREE.MeshStandardMaterial({ color: 0xe8d9b5, roughness: 0.9 })
+);
+// Path extends from z = -14 (plaza edge) to z = -28. Center is at z = -21.
+lakePath.position.set(0, 0.015, -21);
+lakePath.receiveShadow = true;
+scene.add(lakePath);
+
+// Lake water
+const lakeWater = new THREE.Mesh(
+  new THREE.CircleGeometry(7, 32),
+  new THREE.MeshStandardMaterial({ color: 0x2a7b9b, roughness: 0.1, metalness: 0.1 })
+);
+lakeWater.rotation.x = -Math.PI / 2;
+lakeWater.position.set(0, 0.016, -35);
+lakeWater.receiveShadow = true;
+scene.add(lakeWater);
+
+// Wooden Pier extending into the lake
+const pier = new THREE.Mesh(
+  new THREE.BoxGeometry(1.6, 0.08, 3),
+  new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.9 })
+);
+// Starts at z = -28 (path end) and extends to z = -31 (extends 1.5 units into the lake)
+pier.position.set(0, 0.05, -29.5);
+pier.castShadow = true;
+pier.receiveShadow = true;
+scene.add(pier);
+
+// Lily pads floating on the water
+const lilyPadGeo = new THREE.CircleGeometry(0.4, 8);
+const lilyPadMat = new THREE.MeshStandardMaterial({ color: 0x3d8c40, roughness: 0.8 });
+
+const padLocations: [number, number][] = [
+  [-2, -33],
+  [2.5, -36.5],
+  [-1.5, -38],
+];
+for (const [lx, lz] of padLocations) {
+  const pad = new THREE.Mesh(lilyPadGeo, lilyPadMat);
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.set(lx, 0.02, lz);
+  pad.receiveShadow = true;
+  scene.add(pad);
+}
+
+// Decorative rocks around the lake perimeter
+const rockGeo = new THREE.DodecahedronGeometry(0.5);
+const rockMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
+const rockLocations: [number, number, number][] = [
+  [-6.5, -32.5, 0.9],
+  [6.8, -33.5, 0.8],
+  [-5.5, -39.5, 1.2],
+  [5.0, -40.0, 1.0],
+  [-1.5, -42.0, 0.7],
+  [2.0, -41.8, 1.1],
+];
+for (const [rx, rz, rs] of rockLocations) {
+  const rock = new THREE.Mesh(rockGeo, rockMat);
+  rock.scale.set(rs, rs * 0.7, rs);
+  rock.position.set(rx, rs * 0.35, rz);
+  rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+  rock.castShadow = true;
+  rock.receiveShadow = true;
+  scene.add(rock);
+}
+
 // --- Simple procedural trees ----------------------------------------------------
 
 function makeTree(x: number, z: number, scale = 1) {
@@ -154,8 +225,8 @@ const treePositions: [number, number, number][] = [
   [8, 24, 1.05],
   [-24, -18, 1],
   [22, -20, 1.1],
-  [-6, -24, 0.95],
-  [4, -26, 1],
+  [-5, -18, 0.95],
+  [5, -18, 1],
 ];
 for (const [x, z, s] of treePositions) scene.add(makeTree(x, z, s));
 
