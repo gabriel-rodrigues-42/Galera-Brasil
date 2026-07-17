@@ -61,7 +61,12 @@ export class NpcManager {
         // Visor
         const visor = new THREE.Mesh(
           new THREE.BoxGeometry(0.35, 0.08, 0.2),
-          new THREE.MeshStandardMaterial({ color: 0x023e8a, emissive: 0x00d2ff, emissiveIntensity: 1.2, roughness: 0.1 })
+          new THREE.MeshStandardMaterial({
+            color: 0x023e8a,
+            emissive: 0x00d2ff,
+            emissiveIntensity: 1.2,
+            roughness: 0.1,
+          })
         );
         visor.position.set(0, 0.05, 0.22);
         headGroup.add(visor);
@@ -76,7 +81,11 @@ export class NpcManager {
 
         const antTip = new THREE.Mesh(
           new THREE.SphereGeometry(0.05, 8, 8),
-          new THREE.MeshStandardMaterial({ color: 0xffcf5c, emissive: 0xffcf5c, emissiveIntensity: 0.8 })
+          new THREE.MeshStandardMaterial({
+            color: 0xffcf5c,
+            emissive: 0xffcf5c,
+            emissiveIntensity: 0.8,
+          })
         );
         antTip.position.y = 0.55;
         headGroup.add(antTip);
@@ -89,9 +98,9 @@ export class NpcManager {
           headGroup.position.y = 1.2 + Math.sin(time * 2.5) * 0.08;
           headGroup.rotation.y = Math.sin(time * 0.8) * 0.15;
           // Pulsing visor intensity
-          (visor.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.0 + Math.sin(time * 5.0) * 0.3;
+          (visor.material as THREE.MeshStandardMaterial).emissiveIntensity =
+            1.0 + Math.sin(time * 5.0) * 0.3;
         };
-
       } else if (def.id === 'joker') {
         // --- Joker NPC visuals ---
         // Toy box base
@@ -153,7 +162,6 @@ export class NpcManager {
           jokerHeadGroup.scale.y = 1.0 - Math.abs(bounce) * 0.06;
           jokerHeadGroup.rotation.y = time * 1.5;
         };
-
       } else {
         // --- Romance NPC visuals ---
         // Terracotta planter base
@@ -183,7 +191,7 @@ export class NpcManager {
             emissive: 0xff4b72,
             emissiveIntensity: 0.8,
             roughness: 0.4,
-            metalness: 0.2
+            metalness: 0.2,
           })
         );
         heart.position.y = 1.35;
@@ -202,7 +210,9 @@ export class NpcManager {
       // Add Name Tag
       const nameColor = def.id === 'robot' ? '#00d2ff' : def.id === 'joker' ? '#ffb997' : '#ff4b72';
       const nameTexture = makeNameTagTexture(def.displayName, nameColor);
-      const nameSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTexture, depthTest: false }));
+      const nameSprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: nameTexture, depthTest: false })
+      );
       nameSprite.scale.set(1.1, 0.275, 1);
       nameSprite.position.y = 1.95;
       nameSprite.renderOrder = 10;

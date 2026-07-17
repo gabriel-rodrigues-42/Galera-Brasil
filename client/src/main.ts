@@ -66,19 +66,17 @@ function resizeRenderer() {
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
-  log('info', `resizeRenderer: ${width}x${height} (canvas rect now ${canvas.getBoundingClientRect().width}x${canvas.getBoundingClientRect().height})`);
+  log(
+    'info',
+    `resizeRenderer: ${width}x${height} (canvas rect now ${canvas.getBoundingClientRect().width}x${canvas.getBoundingClientRect().height})`
+  );
 }
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbfe3ff);
 scene.fog = new THREE.Fog(0xbfe3ff, 25, 90);
 
-const camera = new THREE.PerspectiveCamera(
-  70,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  200,
-);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
 camera.position.set(0, 1.7, 8);
 
 resizeRenderer();
@@ -104,7 +102,7 @@ scene.add(sky);
 
 const grass = new THREE.Mesh(
   new THREE.CircleGeometry(60, 48),
-  new THREE.MeshStandardMaterial({ color: 0x4a8a4f, roughness: 1 }),
+  new THREE.MeshStandardMaterial({ color: 0x4a8a4f, roughness: 1 })
 );
 grass.rotation.x = -Math.PI / 2;
 grass.receiveShadow = true;
@@ -112,7 +110,7 @@ scene.add(grass);
 
 const plaza = new THREE.Mesh(
   new THREE.CircleGeometry(14, 48),
-  new THREE.MeshStandardMaterial({ color: 0xe8d9b5, roughness: 0.9 }),
+  new THREE.MeshStandardMaterial({ color: 0xe8d9b5, roughness: 0.9 })
 );
 plaza.rotation.x = -Math.PI / 2;
 plaza.position.y = 0.01;
@@ -126,7 +124,7 @@ function makeTree(x: number, z: number, scale = 1) {
 
   const trunk = new THREE.Mesh(
     new THREE.CylinderGeometry(0.15, 0.2, 1.4, 8),
-    new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1 }),
+    new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1 })
   );
   trunk.position.y = 0.7;
   trunk.castShadow = true;
@@ -146,9 +144,18 @@ function makeTree(x: number, z: number, scale = 1) {
 }
 
 const treePositions: [number, number, number][] = [
-  [-18, -10, 1.1], [-22, 4, 0.9], [-16, 16, 1.2], [-9, 22, 1],
-  [18, -8, 1], [23, 6, 1.15], [15, 18, 0.9], [8, 24, 1.05],
-  [-24, -18, 1], [22, -20, 1.1], [-6, -24, 0.95], [4, -26, 1],
+  [-18, -10, 1.1],
+  [-22, 4, 0.9],
+  [-16, 16, 1.2],
+  [-9, 22, 1],
+  [18, -8, 1],
+  [23, 6, 1.15],
+  [15, 18, 0.9],
+  [8, 24, 1.05],
+  [-24, -18, 1],
+  [22, -20, 1.1],
+  [-6, -24, 0.95],
+  [4, -26, 1],
 ];
 for (const [x, z, s] of treePositions) scene.add(makeTree(x, z, s));
 
@@ -156,11 +163,18 @@ for (const [x, z, s] of treePositions) scene.add(makeTree(x, z, s));
 
 function makeSolarCanopy(x: number, z: number, rotation = 0) {
   const group = new THREE.Group();
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0xd8d2c2, roughness: 0.5, metalness: 0.3 });
+  const poleMat = new THREE.MeshStandardMaterial({
+    color: 0xd8d2c2,
+    roughness: 0.5,
+    metalness: 0.3,
+  });
 
   const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.6, 8);
   const offsets: [number, number][] = [
-    [-1.6, -1.1], [1.6, -1.1], [-1.6, 1.1], [1.6, 1.1],
+    [-1.6, -1.1],
+    [1.6, -1.1],
+    [-1.6, 1.1],
+    [1.6, 1.1],
   ];
   for (const [ox, oz] of offsets) {
     const pole = new THREE.Mesh(poleGeo, poleMat);
@@ -171,7 +185,7 @@ function makeSolarCanopy(x: number, z: number, rotation = 0) {
 
   const panel = new THREE.Mesh(
     new THREE.BoxGeometry(3.6, 0.08, 2.6),
-    new THREE.MeshStandardMaterial({ color: 0x274a63, roughness: 0.3, metalness: 0.6 }),
+    new THREE.MeshStandardMaterial({ color: 0x274a63, roughness: 0.3, metalness: 0.6 })
   );
   panel.position.y = 2.7;
   panel.castShadow = true;
@@ -248,7 +262,8 @@ network.onChat = (event) => {
 };
 network.onSystem = (text) => appendChatLine('', text, true);
 network.onHubAdded = (event) => hubManager.addFacade(event);
-network.onDisconnected = (reason) => appendChatLine('', `Desconectado do servidor (${reason})`, true);
+network.onDisconnected = (reason) =>
+  appendChatLine('', `Desconectado do servidor (${reason})`, true);
 
 // --- Player controls: pointer lock + WASD ---------------------------------------
 
@@ -268,7 +283,8 @@ nameInputEl.value = localStorage.getItem(SAVED_NAME_KEY) ?? '';
 
 joinFormEl.addEventListener('submit', (e) => {
   e.preventDefault();
-  const name = nameInputEl.value.trim().slice(0, 24) || `Visitante${Math.floor(Math.random() * 900 + 100)}`;
+  const name =
+    nameInputEl.value.trim().slice(0, 24) || `Visitante${Math.floor(Math.random() * 900 + 100)}`;
   const submitBtn = joinFormEl.querySelector('button')!;
   submitBtn.disabled = true;
   nameInputEl.disabled = true;
@@ -286,7 +302,8 @@ joinFormEl.addEventListener('submit', (e) => {
       resumeBlockEl.classList.remove('hidden');
       requestLock();
 
-      api.getPlayerStickers(name)
+      api
+        .getPlayerStickers(name)
         .then((stickers) => {
           stickersCollected = stickers;
           log('info', `loaded player stickers: ${stickers.join(', ')}`);
@@ -312,7 +329,8 @@ function requestLock() {
     if (err.name === 'SecurityError') {
       joinStatusEl.textContent = 'Aguarde um instante e clique novamente.';
       setTimeout(() => {
-        if (joinStatusEl.textContent === 'Aguarde um instante e clique novamente.') joinStatusEl.textContent = '';
+        if (joinStatusEl.textContent === 'Aguarde um instante e clique novamente.')
+          joinStatusEl.textContent = '';
       }, 2000);
     }
   });
@@ -362,8 +380,12 @@ window.addEventListener('keydown', (e) => {
 // lock — only meaningful once already connected (the join form handles the
 // first connection, via its submit handler above).
 overlay.addEventListener('click', (e) => {
-  if (!connected || e.target === nameInputEl || (e.target as HTMLElement).closest('#join-form')) return;
-  log('info', `overlay clicked, requesting pointer lock (document.hasFocus=${document.hasFocus()}, visibilityState=${document.visibilityState})`);
+  if (!connected || e.target === nameInputEl || (e.target as HTMLElement).closest('#join-form'))
+    return;
+  log(
+    'info',
+    `overlay clicked, requesting pointer lock (document.hasFocus=${document.hasFocus()}, visibilityState=${document.visibilityState})`
+  );
   requestLock();
 });
 controls.addEventListener('lock', () => {
@@ -372,7 +394,7 @@ controls.addEventListener('lock', () => {
   log(
     'info',
     `pointer lock ENGAGED — camera pos=(${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)}) ` +
-      `rot(yaw,pitch deg)=(${THREE.MathUtils.radToDeg(camera.rotation.y).toFixed(1)}, ${THREE.MathUtils.radToDeg(camera.rotation.x).toFixed(1)}) scene.children=${scene.children.length}`,
+      `rot(yaw,pitch deg)=(${THREE.MathUtils.radToDeg(camera.rotation.y).toFixed(1)}, ${THREE.MathUtils.radToDeg(camera.rotation.x).toFixed(1)}) scene.children=${scene.children.length}`
   );
 });
 controls.addEventListener('unlock', () => {
@@ -488,7 +510,8 @@ let eJustPressed = false;
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'KeyE') eJustPressed = true;
-  if (e.code === 'Enter' && controls.isLocked && !openPost && !chatInputOpen && !addPostOpen) openChatInput();
+  if (e.code === 'Enter' && controls.isLocked && !openPost && !chatInputOpen && !addPostOpen)
+    openChatInput();
   if (
     e.code === 'KeyN' &&
     controls.isLocked &&
@@ -633,12 +656,16 @@ async function enterHub(owner: string) {
     lastPlazaTransform.yaw = camera.rotation.y;
     mode = 'hub';
     currentHubOwner = owner;
-    controls.object.position.set(origin.x + built.spawnPoint.x, built.spawnPoint.y, origin.z + built.spawnPoint.z);
+    controls.object.position.set(
+      origin.x + built.spawnPoint.x,
+      built.spawnPoint.y,
+      origin.z + built.spawnPoint.z
+    );
     camera.rotation.set(0, built.spawnYaw, 0);
     velocity.set(0, 0, 0);
     log(
       'info',
-      `entered hub "${owner}" — teleported to (${controls.object.position.x.toFixed(2)}, ${controls.object.position.y.toFixed(2)}, ${controls.object.position.z.toFixed(2)})`,
+      `entered hub "${owner}" — teleported to (${controls.object.position.x.toFixed(2)}, ${controls.object.position.y.toFixed(2)}, ${controls.object.position.z.toFixed(2)})`
     );
   } catch (err) {
     log('error', `failed to enter hub "${owner}": ${err}`);
@@ -653,21 +680,78 @@ function exitHub() {
   controls.object.position.copy(lastPlazaTransform.position);
   camera.rotation.set(0, lastPlazaTransform.yaw, 0);
   velocity.set(0, 0, 0);
-  log('info', `exited hub — restored to (${controls.object.position.x.toFixed(2)}, ${controls.object.position.y.toFixed(2)}, ${controls.object.position.z.toFixed(2)})`);
+  log(
+    'info',
+    `exited hub — restored to (${controls.object.position.x.toFixed(2)}, ${controls.object.position.y.toFixed(2)}, ${controls.object.position.z.toFixed(2)})`
+  );
 }
 
 // --- NPC & Sticker Panel UI Handlers -------------------------------------------
 
 const STICKERS = [
-  { id: 'sticker_robot_1', name: 'Microchip de Ouro', emoji: '🪙', description: 'Concedido pelo Robô por dominar atalhos do PC.', npcType: 'robot' },
-  { id: 'sticker_robot_2', name: 'Fibra Óptica Express', emoji: '⚡', description: 'Concedido pelo Robô por demonstrar conexão rápida.', npcType: 'robot' },
-  { id: 'sticker_robot_3', name: 'Super Antena 5G', emoji: '📡', description: 'Concedido pelo Robô por captar excelentes dicas.', npcType: 'robot' },
-  { id: 'sticker_joker_1', name: 'Risada Suprema', emoji: '🎭', description: 'Concedido pelo Coringa após ouvir uma ótima piada.', npcType: 'joker' },
-  { id: 'sticker_joker_2', name: 'Buzina Maluca', emoji: '📯', description: 'Concedido pelo Coringa por espalhar bom humor.', npcType: 'joker' },
-  { id: 'sticker_joker_3', name: 'Torta Flutuante', emoji: '🥧', description: 'Concedido pelo Coringa por sobreviver ao stand-up.', npcType: 'joker' },
-  { id: 'sticker_romance_1', name: 'Flecha do Cupido', emoji: '💘', description: 'Concedido pelo Romântico por demonstrar carisma.', npcType: 'romance' },
-  { id: 'sticker_romance_2', name: 'Coração Pixelado', emoji: '💖', description: 'Concedido pelo Romântico para corações apaixonados.', npcType: 'romance' },
-  { id: 'sticker_romance_3', name: 'Poção do Amor', emoji: '🧪', description: 'Concedido pelo Romântico para encontros perfeitos.', npcType: 'romance' },
+  {
+    id: 'sticker_robot_1',
+    name: 'Microchip de Ouro',
+    emoji: '🪙',
+    description: 'Concedido pelo Robô por dominar atalhos do PC.',
+    npcType: 'robot',
+  },
+  {
+    id: 'sticker_robot_2',
+    name: 'Fibra Óptica Express',
+    emoji: '⚡',
+    description: 'Concedido pelo Robô por demonstrar conexão rápida.',
+    npcType: 'robot',
+  },
+  {
+    id: 'sticker_robot_3',
+    name: 'Super Antena 5G',
+    emoji: '📡',
+    description: 'Concedido pelo Robô por captar excelentes dicas.',
+    npcType: 'robot',
+  },
+  {
+    id: 'sticker_joker_1',
+    name: 'Risada Suprema',
+    emoji: '🎭',
+    description: 'Concedido pelo Coringa após ouvir uma ótima piada.',
+    npcType: 'joker',
+  },
+  {
+    id: 'sticker_joker_2',
+    name: 'Buzina Maluca',
+    emoji: '📯',
+    description: 'Concedido pelo Coringa por espalhar bom humor.',
+    npcType: 'joker',
+  },
+  {
+    id: 'sticker_joker_3',
+    name: 'Torta Flutuante',
+    emoji: '🥧',
+    description: 'Concedido pelo Coringa por sobreviver ao stand-up.',
+    npcType: 'joker',
+  },
+  {
+    id: 'sticker_romance_1',
+    name: 'Flecha do Cupido',
+    emoji: '💘',
+    description: 'Concedido pelo Romântico por demonstrar carisma.',
+    npcType: 'romance',
+  },
+  {
+    id: 'sticker_romance_2',
+    name: 'Coração Pixelado',
+    emoji: '💖',
+    description: 'Concedido pelo Romântico para corações apaixonados.',
+    npcType: 'romance',
+  },
+  {
+    id: 'sticker_romance_3',
+    name: 'Poção do Amor',
+    emoji: '🧪',
+    description: 'Concedido pelo Romântico para encontros perfeitos.',
+    npcType: 'romance',
+  },
 ];
 
 function renderStickerAlbum(npcType: 'robot' | 'joker' | 'romance') {
@@ -692,16 +776,19 @@ function openNpcPanel(npc: NpcDef) {
   npcPanelNameEl.textContent = npc.displayName;
   npcPanelRewardEl.classList.add('hidden');
   npcPanelRewardEl.textContent = '';
-  
+
   if (npc.id === 'robot') {
     npcBtnActionEl.textContent = 'Pedir Dica';
-    npcPanelTextEl.textContent = 'Olá! Eu sou o Robô da Net. Quer aprender algum atalho ou truque de computador?';
+    npcPanelTextEl.textContent =
+      'Olá! Eu sou o Robô da Net. Quer aprender algum atalho ou truque de computador?';
   } else if (npc.id === 'joker') {
     npcBtnActionEl.textContent = 'Pedir Piada';
-    npcPanelTextEl.textContent = 'Olá! Eu sou o Coringa do Feirão. Preparado para dar umas risadas?';
+    npcPanelTextEl.textContent =
+      'Olá! Eu sou o Coringa do Feirão. Preparado para dar umas risadas?';
   } else {
     npcBtnActionEl.textContent = 'Pedir Cantada / Encontro';
-    npcPanelTextEl.textContent = 'Olá! Eu sou o Cupido Solarpunk. Procurando ideias de encontros ou cantadas românticas?';
+    npcPanelTextEl.textContent =
+      'Olá! Eu sou o Cupido Solarpunk. Procurando ideias de encontros ou cantadas românticas?';
   }
 
   renderStickerAlbum(npc.id);
@@ -725,8 +812,9 @@ npcPanelCloseEl.addEventListener('click', () => {
 npcBtnActionEl.addEventListener('click', () => {
   if (!openNpc) return;
   npcPanelRewardEl.classList.add('hidden');
-  
-  api.getRandomNpcDialogue(openNpc.id)
+
+  api
+    .getRandomNpcDialogue(openNpc.id)
     .then((res) => {
       npcPanelTextEl.textContent = res.content;
       log('info', `Fetched dialogue for ${openNpc?.id}: ${res.content}`);
@@ -739,8 +827,9 @@ npcBtnActionEl.addEventListener('click', () => {
 
 npcBtnStickerEl.addEventListener('click', () => {
   if (!openNpc || !myName) return;
-  
-  api.claimNpcSticker(myName, openNpc.id)
+
+  api
+    .claimNpcSticker(myName, openNpc.id)
     .then((res) => {
       if (res.success && res.sticker) {
         if (!stickersCollected.includes(res.sticker.id)) {
@@ -786,10 +875,13 @@ function updateInteraction() {
 
   if (mode === 'plaza') {
     if (!hubTransitionInFlight) {
-      const nearHub = hubManager.findNearestEntrance(controls.object.position.x, controls.object.position.z);
+      const nearHub = hubManager.findNearestEntrance(
+        controls.object.position.x,
+        controls.object.position.z
+      );
       nearEntranceOwner = nearHub?.owner ?? null;
     }
-    
+
     // Raycast against NPCs in plaza
     if (!nearEntranceOwner && !openNpc && !openPost) {
       camera.getWorldPosition(raycastOrigin);
@@ -808,14 +900,18 @@ function updateInteraction() {
     if (origin) {
       const localX = controls.object.position.x - origin.x;
       const localZ = controls.object.position.z - origin.z;
-      nearExit = Math.hypot(localX - HUB_EXIT_ZONE.x, localZ - HUB_EXIT_ZONE.z) < HUB_EXIT_ZONE.radius;
+      nearExit =
+        Math.hypot(localX - HUB_EXIT_ZONE.x, localZ - HUB_EXIT_ZONE.z) < HUB_EXIT_ZONE.radius;
     }
 
     if (!openPost && built) {
       camera.getWorldPosition(raycastOrigin);
       camera.getWorldDirection(raycastDir);
       raycaster.set(raycastOrigin, raycastDir);
-      const hits = raycaster.intersectObjects(built.interactables.map((i) => i.object), true);
+      const hits = raycaster.intersectObjects(
+        built.interactables.map((i) => i.object),
+        true
+      );
       if (hits.length > 0 && hits[0].distance <= INTERACT_DISTANCE) {
         hovered = findInteractable(hits[0].object, built.interactables);
       }
@@ -897,10 +993,18 @@ function animate(timestamp: number) {
     sendAccum += delta;
     if (connected && sendAccum >= SEND_INTERVAL) {
       sendAccum = 0;
-      const origin = mode === 'hub' && currentHubOwner ? hubManager.originFor(currentHubOwner) : null;
+      const origin =
+        mode === 'hub' && currentHubOwner ? hubManager.originFor(currentHubOwner) : null;
       const localX = origin ? camera.position.x - origin.x : camera.position.x;
       const localZ = origin ? camera.position.z - origin.z : camera.position.z;
-      network.sendMove(localX, camera.position.y, localZ, camera.rotation.y, mode, currentHubOwner ?? '');
+      network.sendMove(
+        localX,
+        camera.position.y,
+        localZ,
+        camera.rotation.y,
+        mode,
+        currentHubOwner ?? ''
+      );
     }
 
     // Flag any single-frame rotation big enough to plausibly explain "camera
@@ -909,15 +1013,24 @@ function animate(timestamp: number) {
     const yawDeltaDeg = THREE.MathUtils.radToDeg(camera.rotation.y - prevYaw);
     const pitchDeltaDeg = THREE.MathUtils.radToDeg(camera.rotation.x - prevPitch);
     if (Math.abs(yawDeltaDeg) > 60 || Math.abs(pitchDeltaDeg) > 30) {
-      log('warn', `Large single-frame rotation jump: yaw Δ=${yawDeltaDeg.toFixed(1)}° pitch Δ=${pitchDeltaDeg.toFixed(1)}°`);
+      log(
+        'warn',
+        `Large single-frame rotation jump: yaw Δ=${yawDeltaDeg.toFixed(1)}° pitch Δ=${pitchDeltaDeg.toFixed(1)}°`
+      );
     }
   }
   prevYaw = camera.rotation.y;
   prevPitch = camera.rotation.x;
 
-  if (!nanGuardTripped && (!Number.isFinite(camera.position.x) || !Number.isFinite(camera.position.z))) {
+  if (
+    !nanGuardTripped &&
+    (!Number.isFinite(camera.position.x) || !Number.isFinite(camera.position.z))
+  ) {
     nanGuardTripped = true;
-    log('error', `Camera position went non-finite: (${camera.position.x}, ${camera.position.y}, ${camera.position.z}) — recovering to last known-good spot`);
+    log(
+      'error',
+      `Camera position went non-finite: (${camera.position.x}, ${camera.position.y}, ${camera.position.z}) — recovering to last known-good spot`
+    );
     camera.position.set(lastGoodPosition.x, lastGoodPosition.y, lastGoodPosition.z);
     velocity.set(0, 0, 0);
   } else if (Number.isFinite(camera.position.x) && Number.isFinite(camera.position.z)) {
@@ -940,5 +1053,8 @@ function animate(timestamp: number) {
   renderer.render(scene, camera);
 }
 
-log('info', `initial camera pos=(${camera.position.x}, ${camera.position.y}, ${camera.position.z}) scene.children=${scene.children.length}`);
+log(
+  'info',
+  `initial camera pos=(${camera.position.x}, ${camera.position.y}, ${camera.position.z}) scene.children=${scene.children.length}`
+);
 animate(performance.now());

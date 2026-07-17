@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-ssr/
+package-lock.json
+pnpm-lock.yaml
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+.vscode/
+.git/
+.agents/

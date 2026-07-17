@@ -80,8 +80,14 @@ export function getPlayerStickers(playerName: string): Promise<string[]> {
   return apiFetch(`/api/players/${encodeURIComponent(playerName)}/stickers`);
 }
 
-export function claimNpcSticker(playerName: string, npcType: string): Promise<StickerClaimResponse> {
-  return apiFetch(`/api/players/${encodeURIComponent(playerName)}/stickers/claim/${encodeURIComponent(npcType)}`, {
-    method: 'POST'
-  });
+export function claimNpcSticker(
+  playerName: string,
+  npcType: string
+): Promise<StickerClaimResponse> {
+  return apiFetch(
+    `/api/players/${encodeURIComponent(playerName)}/stickers/claim/${encodeURIComponent(npcType)}`,
+    {
+      method: 'POST',
+    }
+  );
 }

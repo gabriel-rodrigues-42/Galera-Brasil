@@ -6,7 +6,7 @@ function wrapText(
   x: number,
   y: number,
   maxWidth: number,
-  lineHeight: number,
+  lineHeight: number
 ): number {
   const words = text.split(/\s+/);
   let line = '';
@@ -32,7 +32,7 @@ function wrapText(
 function makeCanvasTexture(
   width: number,
   height: number,
-  draw: (ctx: CanvasRenderingContext2D) => void,
+  draw: (ctx: CanvasRenderingContext2D) => void
 ): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -47,7 +47,10 @@ function makeCanvasTexture(
 
 /** A framed placeholder "photo" — an abstract gradient card with a caption,
  * standing in for a real uploaded image until Phase 2 adds real uploads. */
-export function makeImagePlaceholderTexture(caption: string, accentColor: string): THREE.CanvasTexture {
+export function makeImagePlaceholderTexture(
+  caption: string,
+  accentColor: string
+): THREE.CanvasTexture {
   return makeCanvasTexture(512, 384, (ctx) => {
     const gradient = ctx.createLinearGradient(0, 0, 512, 384);
     gradient.addColorStop(0, accentColor);

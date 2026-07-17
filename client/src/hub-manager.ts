@@ -11,7 +11,9 @@ const INTERIOR_SPACING = 40; // world-units between each hub's private interior 
 const INTERIOR_Z = 300; // far beyond the plaza's fog draw distance
 const ENTRANCE_RADIUS = 2;
 
-const FACADE_COLORS = [0xe07a5f, 0x81b29a, 0xf2cc8f, 0x3d405b, 0xe8a798, 0xffb997, 0x8ecae6, 0xc9ada7];
+const FACADE_COLORS = [
+  0xe07a5f, 0x81b29a, 0xf2cc8f, 0x3d405b, 0xe8a798, 0xffb997, 0x8ecae6, 0xc9ada7,
+];
 
 export interface HubFacade {
   owner: string;
@@ -64,7 +66,7 @@ export class HubManager {
 
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(3, 2.4, 3),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.7 }),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.7 })
     );
     body.position.y = 1.2;
     body.castShadow = true;
@@ -73,7 +75,7 @@ export class HubManager {
 
     const roof = new THREE.Mesh(
       new THREE.ConeGeometry(2.4, 1.1, 4),
-      new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.8 }),
+      new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.8 })
     );
     roof.position.y = 2.95;
     roof.rotation.y = Math.PI / 4;
@@ -87,7 +89,12 @@ export class HubManager {
   private makeBeacon(): THREE.Mesh {
     return new THREE.Mesh(
       new THREE.OctahedronGeometry(0.35),
-      new THREE.MeshStandardMaterial({ color: 0xffcf5c, emissive: 0xffcf5c, emissiveIntensity: 0.8, roughness: 0.3 }),
+      new THREE.MeshStandardMaterial({
+        color: 0xffcf5c,
+        emissive: 0xffcf5c,
+        emissiveIntensity: 0.8,
+        roughness: 0.3,
+      })
     );
   }
 
@@ -152,7 +159,12 @@ export class HubManager {
     if (!hub) return null;
     if (!hub.built) {
       const record = await api.getHub(owner);
-      const description: HubDescription = { owner: record.owner, bio: record.bio, tag: record.tag, posts: record.posts };
+      const description: HubDescription = {
+        owner: record.owner,
+        bio: record.bio,
+        tag: record.tag,
+        posts: record.posts,
+      };
       hub.built = buildHub(description);
       hub.built.group.position.copy(hub.interiorOrigin);
       this.scene.add(hub.built.group);

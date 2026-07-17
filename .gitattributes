@@ -1,0 +1,26 @@
+# Set default behavior to automatically normalize line endings to LF.
+* text=auto eol=lf
+
+# Force batch files to keep CRLF and other scripts to keep LF
+*.sh text eol=lf
+*.bat text eol=crlf
+
+# Denote binary/asset files to prevent git from converting line endings or corrupting them
+*.glb binary
+*.gltf text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.mp3 binary
+*.wav binary
+*.ogg binary
+*.fbx binary
+*.obj binary
+*.mtl binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.pdf binary

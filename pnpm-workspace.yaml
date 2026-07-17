@@ -1,0 +1,6 @@
+packages:
+  - 'client'
+  - 'server'
+
+blockExoticSubdeps: false
+dangerouslyAllowAllBuilds: true

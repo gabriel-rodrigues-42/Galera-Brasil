@@ -60,14 +60,16 @@ export class AvatarManager {
 
     const body = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.32, 0.9, 6, 12),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.6 }),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.6 })
     );
     body.position.y = 0.95;
     body.castShadow = true;
     group.add(body);
 
     const nameTexture = makeNameTagTexture(state.name, color);
-    const nameSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTexture, depthTest: false }));
+    const nameSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: nameTexture, depthTest: false })
+    );
     nameSprite.scale.set(1.1, 0.275, 1);
     nameSprite.position.y = 2.05;
     nameSprite.renderOrder = 10;

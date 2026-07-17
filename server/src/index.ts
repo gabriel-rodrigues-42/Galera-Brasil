@@ -5,7 +5,15 @@ import path from 'path';
 import { Server } from 'colyseus';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { PlazaRoom } from './rooms/PlazaRoom';
-import { listHubs, getHub, getOrCreateHub, addPost, getRandomNpcDialogue, getPlayerStickers, claimNpcSticker } from './db';
+import {
+  listHubs,
+  getHub,
+  getOrCreateHub,
+  addPost,
+  getRandomNpcDialogue,
+  getPlayerStickers,
+  claimNpcSticker,
+} from './db';
 
 const app = express();
 app.use(cors());

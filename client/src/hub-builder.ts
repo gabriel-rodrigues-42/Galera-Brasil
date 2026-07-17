@@ -56,9 +56,15 @@ export function buildHub(data: HubDescription): BuiltHub {
   addWall(doorSegmentWidth, WALL_HEIGHT, 0.2, -doorSegmentX, WALL_HEIGHT / 2, ROOM_HALF); // south-left
   addWall(doorSegmentWidth, WALL_HEIGHT, 0.2, doorSegmentX, WALL_HEIGHT / 2, ROOM_HALF); // south-right
 
-  const imagePosts = data.posts.filter((p): p is Extract<HubPost, { type: 'image' }> => p.type === 'image');
-  const textPosts = data.posts.filter((p): p is Extract<HubPost, { type: 'text' }> => p.type === 'text');
-  const linkPosts = data.posts.filter((p): p is Extract<HubPost, { type: 'link' }> => p.type === 'link');
+  const imagePosts = data.posts.filter(
+    (p): p is Extract<HubPost, { type: 'image' }> => p.type === 'image'
+  );
+  const textPosts = data.posts.filter(
+    (p): p is Extract<HubPost, { type: 'text' }> => p.type === 'text'
+  );
+  const linkPosts = data.posts.filter(
+    (p): p is Extract<HubPost, { type: 'link' }> => p.type === 'link'
+  );
 
   // Image posts: framed pictures on the back (north) wall.
   const imageXs = linspace(imagePosts.length, -ROOM_HALF + 1.6, ROOM_HALF - 1.6);
@@ -66,11 +72,11 @@ export function buildHub(data: HubDescription): BuiltHub {
     const texture = makeImagePlaceholderTexture(post.caption, post.accentColor);
     const frame = new THREE.Mesh(
       new THREE.BoxGeometry(2.1, 1.65, 0.08),
-      new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.6 }),
+      new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.6 })
     );
     const picture = new THREE.Mesh(
       new THREE.PlaneGeometry(1.9, 1.45),
-      new THREE.MeshStandardMaterial({ map: texture, roughness: 0.7 }),
+      new THREE.MeshStandardMaterial({ map: texture, roughness: 0.7 })
     );
     picture.position.z = 0.05;
     frame.add(picture);
@@ -86,7 +92,7 @@ export function buildHub(data: HubDescription): BuiltHub {
     const texture = makePlaqueTexture(post.title, post.body);
     const plaque = new THREE.Mesh(
       new THREE.PlaneGeometry(2, 1.25),
-      new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8 }),
+      new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8 })
     );
     plaque.position.set(-ROOM_HALF + 0.15, 1.6, textZs[i]);
     plaque.rotation.y = Math.PI / 2;
@@ -101,7 +107,7 @@ export function buildHub(data: HubDescription): BuiltHub {
     const pedestal = new THREE.Group();
     const column = new THREE.Mesh(
       new THREE.CylinderGeometry(0.28, 0.32, 1.1, 12),
-      new THREE.MeshStandardMaterial({ color: 0x22333c, roughness: 0.4, metalness: 0.4 }),
+      new THREE.MeshStandardMaterial({ color: 0x22333c, roughness: 0.4, metalness: 0.4 })
     );
     column.position.y = 0.55;
     column.castShadow = true;
@@ -115,7 +121,7 @@ export function buildHub(data: HubDescription): BuiltHub {
         emissive: 0x1a4a55,
         emissiveIntensity: 0.6,
         roughness: 0.3,
-      }),
+      })
     );
     top.position.y = 1.12;
     pedestal.add(top);
