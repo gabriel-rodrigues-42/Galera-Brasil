@@ -217,7 +217,9 @@ const lastPlazaTransform = { position: new THREE.Vector3(0, 1.7, 8), yaw: 0 };
 const controls = new PointerLockControls(camera, canvas);
 scene.add(controls.object);
 
-canvas.addEventListener('click', () => controls.lock());
+// The overlay sits visually on top of the canvas while visible, so it (not
+// the canvas) is what actually receives the click that should engage pointer lock.
+overlay.addEventListener('click', () => controls.lock());
 controls.addEventListener('lock', () => {
   overlay.classList.add('hidden');
   document.body.classList.add('locked');
