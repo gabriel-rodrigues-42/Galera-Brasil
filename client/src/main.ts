@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-import { buildHub, ROOM_HALF, HUB_EXIT_ZONE, type Interactable } from './hub-builder';
-import { demoHub } from './hub-content';
+import { HUB_EXIT_ZONE, type Interactable } from './hub-builder';
+import { HubManager, ROOM_HALF } from './hub-manager';
 import type { HubPost } from './hub-types';
 import { log, initDebugPanel, updateStats, installGlobalErrorLogging } from './logger';
 import { Network } from './network';
 import { AvatarManager } from './avatars';
+import * as api from './api';
 import './style.css';
 
 installGlobalErrorLogging();
@@ -27,6 +28,11 @@ const joinStatusEl = document.querySelector<HTMLParagraphElement>('#join-status'
 const resumeBlockEl = document.querySelector<HTMLDivElement>('#resume-block')!;
 const chatLogEl = document.querySelector<HTMLDivElement>('#chat-log')!;
 const chatInputEl = document.querySelector<HTMLInputElement>('#chat-input')!;
+const addPostPanelEl = document.querySelector<HTMLDivElement>('#add-post-panel')!;
+const addPostFormEl = document.querySelector<HTMLFormElement>('#add-post-form')!;
+const postTitleInputEl = document.querySelector<HTMLInputElement>('#post-title-input')!;
+const postBodyInputEl = document.querySelector<HTMLTextAreaElement>('#post-body-input')!;
+const addPostCancelEl = document.querySelector<HTMLButtonElement>('#add-post-cancel')!;
 initDebugPanel(debugLogEl, debugStatsEl);
 
 window.addEventListener('keydown', (e) => {
@@ -168,68 +174,16 @@ scene.add(makeSolarCanopy(-6, 0, 0.3));
 scene.add(makeSolarCanopy(6, -1.5, -0.2));
 scene.add(makeSolarCanopy(0, 6, Math.PI / 2));
 
-// --- Placeholder content-garden hubs (future: profile facades) -----------------
+// --- Content Garden hubs: one per registered friend, fetched from the server ---
 
-const hubColors = [0xe07a5f, 0x81b29a, 0xf2cc8f, 0x3d405b, 0xe8a798];
-
-function makeHub(x: number, z: number, color: number, rotation: number) {
-  const group = new THREE.Group();
-
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(3, 2.4, 3),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.7 }),
-  );
-  body.position.y = 1.2;
-  body.castShadow = true;
-  body.receiveShadow = true;
-  group.add(body);
-
-  const roof = new THREE.Mesh(
-    new THREE.ConeGeometry(2.4, 1.1, 4),
-    new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.8 }),
-  );
-  roof.position.y = 2.95;
-  roof.rotation.y = Math.PI / 4;
-  roof.castShadow = true;
-  group.add(roof);
-
-  group.position.set(x, 0, z);
-  group.rotation.y = rotation;
-  return group;
-}
-
-const ring = 20;
-const hubCount = 5;
-const hub0Position = new THREE.Vector3();
-for (let i = 0; i < hubCount; i++) {
-  const angle = (i / hubCount) * Math.PI * 2;
-  const x = Math.sin(angle) * ring;
-  const z = Math.cos(angle) * ring;
-  scene.add(makeHub(x, z, hubColors[i], angle + Math.PI));
-  if (i === 0) hub0Position.set(x, 0, z);
-}
-
-// Beacon marking hub #0 as the one real, walkable Content Garden (Phase 1);
-// the other four are still just placeholder facades for the future street.
-const beacon = new THREE.Mesh(
-  new THREE.OctahedronGeometry(0.35),
-  new THREE.MeshStandardMaterial({ color: 0xffcf5c, emissive: 0xffcf5c, emissiveIntensity: 0.8, roughness: 0.3 }),
-);
-beacon.position.set(hub0Position.x, 3.6, hub0Position.z);
-scene.add(beacon);
-
-// --- The Content Garden: hub #0's walkable interior --------------------------
-
-const HUB_INTERIOR_ORIGIN = new THREE.Vector3(0, 0, 300); // far beyond fog draw distance
-const builtHub = buildHub(demoHub);
-builtHub.group.position.copy(HUB_INTERIOR_ORIGIN);
-scene.add(builtHub.group);
-
-const ENTRANCE_POINT = { x: hub0Position.x, z: hub0Position.z - 2.5 };
-const ENTRANCE_RADIUS = 2;
+const hubManager = new HubManager(scene);
+hubManager.refreshList().catch((err) => log('error', `failed to load hub list: ${err}`));
 
 type Mode = 'plaza' | 'hub';
 let mode: Mode = 'plaza';
+let currentHubOwner: string | null = null;
+let hubTransitionInFlight = false;
+let myName = '';
 let openPost: HubPost | null = null;
 const lastPlazaTransform = { position: new THREE.Vector3(0, 1.7, 8), yaw: 0 };
 
@@ -246,7 +200,7 @@ function getServerUrl(): string {
 }
 
 const network = new Network(getServerUrl());
-const avatarManager = new AvatarManager(scene, HUB_INTERIOR_ORIGIN);
+const avatarManager = new AvatarManager(scene, (hubId) => hubManager.originFor(hubId));
 let connected = false;
 
 const MAX_CHAT_LINES = 8;
@@ -276,6 +230,7 @@ network.onChat = (event) => {
   avatarManager.showChatBubble(event.sessionId, event.text, performance.now() / 1000);
 };
 network.onSystem = (text) => appendChatLine('', text, true);
+network.onHubAdded = (event) => hubManager.addFacade(event);
 network.onDisconnected = (reason) => appendChatLine('', `Desconectado do servidor (${reason})`, true);
 
 // --- Player controls: pointer lock + WASD ---------------------------------------
@@ -304,8 +259,10 @@ joinFormEl.addEventListener('submit', (e) => {
 
   network
     .connect(name)
+    .then(() => hubManager.ensureOwnHub(name))
     .then(() => {
       localStorage.setItem(SAVED_NAME_KEY, name);
+      myName = name;
       connected = true;
       joinFormEl.classList.add('hidden');
       joinStatusEl.textContent = '';
@@ -344,6 +301,7 @@ controls.addEventListener('unlock', () => {
   hintEl.classList.add('hidden');
   closePostPanel();
   closeChatInput();
+  closeAddPostForm();
   log('info', 'pointer lock RELEASED');
 });
 // PointerLockControls logs this to console itself but doesn't expose it as a
@@ -383,12 +341,65 @@ chatInputEl.addEventListener('keydown', (e) => {
   }
 });
 
+// --- Add-post form: only usable inside your own hub -----------------------------
+
+let addPostOpen = false;
+
+function openAddPostForm() {
+  addPostOpen = true;
+  Object.keys(keys).forEach((code) => (keys[code] = false));
+  addPostPanelEl.classList.remove('hidden');
+  postTitleInputEl.value = '';
+  postBodyInputEl.value = '';
+  postTitleInputEl.focus();
+}
+
+function closeAddPostForm() {
+  addPostOpen = false;
+  addPostPanelEl.classList.add('hidden');
+  postTitleInputEl.blur();
+  postBodyInputEl.blur();
+}
+
+addPostFormEl.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.code === 'Escape') closeAddPostForm();
+});
+addPostCancelEl.addEventListener('click', () => closeAddPostForm());
+
+addPostFormEl.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const title = postTitleInputEl.value.trim();
+  const body = postBodyInputEl.value.trim();
+  if (!title || !body || !currentHubOwner) return;
+
+  api
+    .addPost(currentHubOwner, { type: 'text', title, body })
+    .then(() => hubManager.rebuild(currentHubOwner!))
+    .then(() => {
+      log('info', `post added to hub "${currentHubOwner}": "${title}"`);
+      closeAddPostForm();
+    })
+    .catch((err) => log('error', `failed to add post: ${err}`));
+});
+
 const keys: Record<string, boolean> = {};
 let eJustPressed = false;
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'KeyE') eJustPressed = true;
-  if (e.code === 'Enter' && controls.isLocked && !openPost && !chatInputOpen) openChatInput();
+  if (e.code === 'Enter' && controls.isLocked && !openPost && !chatInputOpen && !addPostOpen) openChatInput();
+  if (
+    e.code === 'KeyN' &&
+    controls.isLocked &&
+    !openPost &&
+    !chatInputOpen &&
+    !addPostOpen &&
+    mode === 'hub' &&
+    currentHubOwner === myName
+  ) {
+    openAddPostForm();
+  }
 });
 window.addEventListener('keyup', (e) => (keys[e.code] = false));
 
@@ -403,7 +414,7 @@ function isDown(...codes: string[]): boolean {
 }
 
 function updateMovement(delta: number) {
-  if (openPost || chatInputOpen) return; // frozen while reading a post panel or typing chat
+  if (openPost || chatInputOpen || addPostOpen) return; // frozen while a UI panel is open
 
   // Damping
   velocity.x -= velocity.x * 8 * delta;
@@ -436,13 +447,16 @@ function updateMovement(delta: number) {
       obj.position.x *= scale;
       obj.position.z *= scale;
     }
-  } else {
+  } else if (currentHubOwner) {
     // No real colliders yet on the hub's walls, so clamp to the room's
     // interior bounds instead — exiting only happens via the E-triggered
     // teleport at HUB_EXIT_ZONE, not by walking through the doorway gap.
-    const limit = ROOM_HALF - 0.3;
-    obj.position.x = HUB_INTERIOR_ORIGIN.x + THREE.MathUtils.clamp(obj.position.x - HUB_INTERIOR_ORIGIN.x, -limit, limit);
-    obj.position.z = HUB_INTERIOR_ORIGIN.z + THREE.MathUtils.clamp(obj.position.z - HUB_INTERIOR_ORIGIN.z, -limit, limit);
+    const origin = hubManager.originFor(currentHubOwner);
+    if (origin) {
+      const limit = ROOM_HALF - 0.3;
+      obj.position.x = origin.x + THREE.MathUtils.clamp(obj.position.x - origin.x, -limit, limit);
+      obj.position.z = origin.z + THREE.MathUtils.clamp(obj.position.z - origin.z, -limit, limit);
+    }
   }
   obj.position.y = 1.7;
 }
@@ -454,10 +468,10 @@ const INTERACT_DISTANCE = 3.2;
 const raycastOrigin = new THREE.Vector3();
 const raycastDir = new THREE.Vector3();
 
-function findInteractable(hit: THREE.Object3D): Interactable | null {
+function findInteractable(hit: THREE.Object3D, interactables: Interactable[]): Interactable | null {
   let obj: THREE.Object3D | null = hit;
   while (obj) {
-    const found = builtHub.interactables.find((i) => i.object === obj);
+    const found = interactables.find((i) => i.object === obj);
     if (found) return found;
     obj = obj.parent;
   }
@@ -501,22 +515,35 @@ function closePostPanel() {
   log('info', 'post panel closed');
 }
 
-function enterHub() {
-  lastPlazaTransform.position.copy(controls.object.position);
-  lastPlazaTransform.yaw = camera.rotation.y;
-  mode = 'hub';
-  controls.object.position.set(
-    HUB_INTERIOR_ORIGIN.x + builtHub.spawnPoint.x,
-    builtHub.spawnPoint.y,
-    HUB_INTERIOR_ORIGIN.z + builtHub.spawnPoint.z,
-  );
-  camera.rotation.set(0, builtHub.spawnYaw, 0);
-  velocity.set(0, 0, 0);
-  log('info', `entered hub — teleported to (${controls.object.position.x.toFixed(2)}, ${controls.object.position.y.toFixed(2)}, ${controls.object.position.z.toFixed(2)})`);
+async function enterHub(owner: string) {
+  if (hubTransitionInFlight) return;
+  hubTransitionInFlight = true;
+  try {
+    const built = await hubManager.enter(owner);
+    const origin = hubManager.originFor(owner);
+    if (!built || !origin) return;
+
+    lastPlazaTransform.position.copy(controls.object.position);
+    lastPlazaTransform.yaw = camera.rotation.y;
+    mode = 'hub';
+    currentHubOwner = owner;
+    controls.object.position.set(origin.x + built.spawnPoint.x, built.spawnPoint.y, origin.z + built.spawnPoint.z);
+    camera.rotation.set(0, built.spawnYaw, 0);
+    velocity.set(0, 0, 0);
+    log(
+      'info',
+      `entered hub "${owner}" — teleported to (${controls.object.position.x.toFixed(2)}, ${controls.object.position.y.toFixed(2)}, ${controls.object.position.z.toFixed(2)})`,
+    );
+  } catch (err) {
+    log('error', `failed to enter hub "${owner}": ${err}`);
+  } finally {
+    hubTransitionInFlight = false;
+  }
 }
 
 function exitHub() {
   mode = 'plaza';
+  currentHubOwner = null;
   controls.object.position.copy(lastPlazaTransform.position);
   camera.rotation.set(0, lastPlazaTransform.yaw, 0);
   velocity.set(0, 0, 0);
@@ -524,32 +551,40 @@ function exitHub() {
 }
 
 function updateInteraction() {
-  if (chatInputOpen) {
+  if (chatInputOpen || addPostOpen) {
     hintEl.classList.add('hidden');
     return;
   }
 
   let hint = '';
   let hovered: Interactable | null = null;
-  let nearEntrance = false;
+  let nearEntranceOwner: string | null = null;
   let nearExit = false;
+  let isOwnHub = false;
 
   if (mode === 'plaza') {
-    const dx = controls.object.position.x - ENTRANCE_POINT.x;
-    const dz = controls.object.position.z - ENTRANCE_POINT.z;
-    nearEntrance = Math.hypot(dx, dz) < ENTRANCE_RADIUS;
-  } else {
-    const localX = controls.object.position.x - HUB_INTERIOR_ORIGIN.x;
-    const localZ = controls.object.position.z - HUB_INTERIOR_ORIGIN.z;
-    nearExit = Math.hypot(localX - HUB_EXIT_ZONE.x, localZ - HUB_EXIT_ZONE.z) < HUB_EXIT_ZONE.radius;
+    if (!hubTransitionInFlight) {
+      const nearHub = hubManager.findNearestEntrance(controls.object.position.x, controls.object.position.z);
+      nearEntranceOwner = nearHub?.owner ?? null;
+    }
+  } else if (currentHubOwner) {
+    const origin = hubManager.originFor(currentHubOwner);
+    const built = hubManager.getBuilt(currentHubOwner);
+    isOwnHub = currentHubOwner === myName;
 
-    if (!openPost) {
+    if (origin) {
+      const localX = controls.object.position.x - origin.x;
+      const localZ = controls.object.position.z - origin.z;
+      nearExit = Math.hypot(localX - HUB_EXIT_ZONE.x, localZ - HUB_EXIT_ZONE.z) < HUB_EXIT_ZONE.radius;
+    }
+
+    if (!openPost && built) {
       camera.getWorldPosition(raycastOrigin);
       camera.getWorldDirection(raycastDir);
       raycaster.set(raycastOrigin, raycastDir);
-      const hits = raycaster.intersectObjects(builtHub.interactables.map((i) => i.object), true);
+      const hits = raycaster.intersectObjects(built.interactables.map((i) => i.object), true);
       if (hits.length > 0 && hits[0].distance <= INTERACT_DISTANCE) {
-        hovered = findInteractable(hits[0].object);
+        hovered = findInteractable(hits[0].object, built.interactables);
       }
     }
   }
@@ -558,10 +593,12 @@ function updateInteraction() {
     hint = 'Pressione E para fechar';
   } else if (hovered) {
     hint = `Pressione E — ${hovered.label}`;
-  } else if (nearEntrance) {
-    hint = `Pressione E para entrar no hub de ${demoHub.owner}`;
+  } else if (nearEntranceOwner) {
+    hint = `Pressione E para entrar no hub de ${nearEntranceOwner}`;
   } else if (nearExit) {
-    hint = 'Pressione E para sair';
+    hint = isOwnHub ? 'Pressione E para sair · N para novo post' : 'Pressione E para sair';
+  } else if (isOwnHub) {
+    hint = 'Pressione N para adicionar um post';
   }
 
   hintEl.textContent = hint;
@@ -572,8 +609,8 @@ function updateInteraction() {
       closePostPanel();
     } else if (hovered) {
       openPostPanel(hovered.post);
-    } else if (mode === 'plaza' && nearEntrance) {
-      enterHub();
+    } else if (mode === 'plaza' && nearEntranceOwner) {
+      enterHub(nearEntranceOwner);
     } else if (mode === 'hub' && nearExit) {
       exitHub();
     }
@@ -617,9 +654,10 @@ function animate(timestamp: number) {
     sendAccum += delta;
     if (connected && sendAccum >= SEND_INTERVAL) {
       sendAccum = 0;
-      const localX = mode === 'hub' ? camera.position.x - HUB_INTERIOR_ORIGIN.x : camera.position.x;
-      const localZ = mode === 'hub' ? camera.position.z - HUB_INTERIOR_ORIGIN.z : camera.position.z;
-      network.sendMove(localX, camera.position.y, localZ, camera.rotation.y, mode);
+      const origin = mode === 'hub' && currentHubOwner ? hubManager.originFor(currentHubOwner) : null;
+      const localX = origin ? camera.position.x - origin.x : camera.position.x;
+      const localZ = origin ? camera.position.z - origin.z : camera.position.z;
+      network.sendMove(localX, camera.position.y, localZ, camera.rotation.y, mode, currentHubOwner ?? '');
     }
 
     // Flag any single-frame rotation big enough to plausibly explain "camera
@@ -652,9 +690,9 @@ function animate(timestamp: number) {
     `rot yaw=${THREE.MathUtils.radToDeg(camera.rotation.y).toFixed(1)}°  pitch=${THREE.MathUtils.radToDeg(camera.rotation.x).toFixed(1)}°`,
     `scene.children=${scene.children.length}  openPost=${openPost ? openPost.id : 'none'}`,
     `connected=${connected}  sessionId=${network.sessionId || 'none'}  remotePlayers=${avatarManager.count}`,
+    `hub=${currentHubOwner ?? 'none'}  myName=${myName || 'none'}`,
   ]);
 
-  beacon.rotation.y += delta * 1.2;
   renderer.render(scene, camera);
 }
 

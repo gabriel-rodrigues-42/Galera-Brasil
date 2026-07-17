@@ -29,6 +29,18 @@
       </div>
       <div id="chat-log"></div>
       <input id="chat-input" class="hidden" type="text" maxlength="200" autocomplete="off" placeholder="Digite sua mensagem — Enter para enviar, Esc para cancelar" />
+      <div id="add-post-panel" class="hidden">
+        <form id="add-post-form">
+          <h2>Novo post</h2>
+          <input id="post-title-input" type="text" placeholder="Título" maxlength="60" autocomplete="off" />
+          <textarea id="post-body-input" placeholder="Texto do post" maxlength="400" rows="4"></textarea>
+          <div class="add-post-actions">
+            <button type="submit">Publicar</button>
+            <button type="button" id="add-post-cancel">Cancelar</button>
+          </div>
+          <p class="panel-hint">Esc para cancelar</p>
+        </form>
+      </div>
       <div id="debug-panel">
         <div class="debug-title">DEBUG (~ para esconder)</div>
         <pre id="debug-stats"></pre>

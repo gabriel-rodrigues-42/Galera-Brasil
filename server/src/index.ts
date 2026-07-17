@@ -5,9 +5,34 @@ import path from 'path';
 import { Server } from 'colyseus';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { PlazaRoom } from './rooms/PlazaRoom';
+import { listHubs, getHub, getOrCreateHub, addPost } from './db';
 
 const app = express();
 app.use(cors());
+app.use(express.json());
+
+// --- Hub directory API (Phase 2: accounts + many hubs, no login — a hub is
+// just a name-keyed record, trusted within a small group of friends) --------
+
+app.get('/api/hubs', (_req, res) => {
+  res.json(listHubs());
+});
+
+app.get('/api/hubs/:owner', (req, res) => {
+  const hub = getHub(req.params.owner);
+  if (!hub) return res.status(404).json({ error: 'not found' });
+  res.json(hub);
+});
+
+app.post('/api/hubs/:owner/claim', (req, res) => {
+  res.json(getOrCreateHub(req.params.owner));
+});
+
+app.post('/api/hubs/:owner/posts', (req, res) => {
+  const post = addPost(req.params.owner, req.body);
+  if (!post) return res.status(400).json({ error: 'invalid post or unknown owner' });
+  res.json(post);
+});
 
 // Serve the built client (Phase 2+: this becomes a CDN/static host instead,
 // but for the MVP one process serving both keeps deployment/sharing simple).

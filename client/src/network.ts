@@ -8,12 +8,19 @@ export interface RemotePlayerState {
   z: number;
   rotY: number;
   mode: string;
+  hubId: string;
 }
 
 export interface ChatEvent {
   name: string;
   text: string;
   sessionId: string;
+}
+
+export interface HubAddedEvent {
+  owner: string;
+  tag: string;
+  slot: number;
 }
 
 export class Network {
@@ -26,6 +33,7 @@ export class Network {
   onPlayerRemove: (sessionId: string) => void = () => {};
   onChat: (event: ChatEvent) => void = () => {};
   onSystem: (text: string) => void = () => {};
+  onHubAdded: (event: HubAddedEvent) => void = () => {};
   onDisconnected: (reason: string) => void = () => {};
 
   constructor(serverUrl: string) {
@@ -58,6 +66,7 @@ export class Network {
 
     this.room.onMessage('chat', (data: ChatEvent) => this.onChat(data));
     this.room.onMessage('system', (data: { text: string }) => this.onSystem(data.text));
+    this.room.onMessage('hub_added', (data: HubAddedEvent) => this.onHubAdded(data));
 
     this.room.onLeave((code: number) => {
       log('warn', `disconnected from server (code=${code})`);
@@ -69,8 +78,8 @@ export class Network {
     });
   }
 
-  sendMove(x: number, y: number, z: number, rotY: number, mode: string) {
-    this.room?.send('move', { x, y, z, rotY, mode });
+  sendMove(x: number, y: number, z: number, rotY: number, mode: string, hubId: string) {
+    this.room?.send('move', { x, y, z, rotY, mode, hubId });
   }
 
   sendChat(text: string) {
@@ -79,5 +88,13 @@ export class Network {
 }
 
 function toState(player: any): RemotePlayerState {
-  return { name: player.name, x: player.x, y: player.y, z: player.z, rotY: player.rotY, mode: player.mode };
+  return {
+    name: player.name,
+    x: player.x,
+    y: player.y,
+    z: player.z,
+    rotY: player.rotY,
+    mode: player.mode,
+    hubId: player.hubId,
+  };
 }

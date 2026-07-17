@@ -1,5 +1,6 @@
 import { Room, Client } from 'colyseus';
 import { Schema, MapSchema, type } from '@colyseus/schema';
+import { getHub, getOrCreateHub } from '../db';
 
 export class PlayerState extends Schema {
   @type('string') name = 'Visitante';
@@ -8,6 +9,8 @@ export class PlayerState extends Schema {
   @type('number') z = 8;
   @type('number') rotY = 0;
   @type('string') mode: 'plaza' | 'hub' = 'plaza';
+  /** Owner name of the hub this player is currently inside; empty in plaza. */
+  @type('string') hubId = '';
 }
 
 export class PlazaState extends Schema {
@@ -24,6 +27,7 @@ interface MoveMessage {
   z?: number;
   rotY?: number;
   mode?: string;
+  hubId?: string;
 }
 
 interface ChatMessage {
@@ -52,6 +56,7 @@ export class PlazaRoom extends Room<PlazaState> {
       if (Number.isFinite(message?.z)) player.z = message.z!;
       if (Number.isFinite(message?.rotY)) player.rotY = message.rotY!;
       if (message?.mode === 'plaza' || message?.mode === 'hub') player.mode = message.mode;
+      if (typeof message?.hubId === 'string') player.hubId = message.hubId.slice(0, MAX_NAME_LENGTH);
     });
 
     this.onMessage('chat', (client, message: ChatMessage) => {
@@ -68,6 +73,15 @@ export class PlazaRoom extends Room<PlazaState> {
     const player = new PlayerState();
     player.name = sanitizeName(options?.name);
     this.state.players.set(client.sessionId, player);
+
+    // First-time visitors get a hub of their own — broadcast it so everyone
+    // already in the praça sees the new facade appear without reloading.
+    const isNewHub = !getHub(player.name);
+    const hub = getOrCreateHub(player.name);
+    if (isNewHub) {
+      this.broadcast('hub_added', { owner: hub.owner, tag: hub.tag, slot: hub.slot });
+    }
+
     this.broadcast('system', { text: `${player.name} entrou na praça` }, { except: client });
     console.log(`[PlazaRoom] ${client.sessionId} joined as "${player.name}" (${this.state.players.size} online)`);
   }

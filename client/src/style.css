@@ -271,6 +271,78 @@ body.locked #crosshair {
   opacity: 0.6;
 }
 
+#add-post-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 12, 9, 0.8);
+  transition: opacity 0.2s ease;
+}
+
+#add-post-panel.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#add-post-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, 80vw);
+  color: #f4f1e8;
+}
+
+#add-post-form h2 {
+  margin: 0 0 4px;
+  color: #ffcf5c;
+  font-size: 1.4rem;
+}
+
+#add-post-form input,
+#add-post-form textarea {
+  font: inherit;
+  font-size: 1rem;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(244, 241, 232, 0.4);
+  background: rgba(0, 0, 0, 0.3);
+  color: #f4f1e8;
+  outline: none;
+  resize: vertical;
+}
+
+#add-post-form input:focus,
+#add-post-form textarea:focus {
+  border-color: #ffcf5c;
+}
+
+.add-post-actions {
+  display: flex;
+  gap: 8px;
+}
+
+#add-post-form button {
+  font: inherit;
+  font-size: 1rem;
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+#add-post-form button[type='submit'] {
+  background: #ffcf5c;
+  color: #241a06;
+  font-weight: 700;
+}
+
+#add-post-cancel {
+  background: rgba(244, 241, 232, 0.15);
+  color: #f4f1e8;
+}
+
 #debug-panel {
   position: absolute;
   top: 10px;

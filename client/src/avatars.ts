@@ -32,19 +32,24 @@ function colorForSession(sessionId: string): string {
 export class AvatarManager {
   private avatars = new Map<string, RemoteAvatar>();
   private scene: THREE.Scene;
-  private hubOrigin: THREE.Vector3;
+  private getHubOrigin: (hubId: string) => THREE.Vector3 | null;
 
-  /** `hubOrigin` is the world-space offset of the shared hub interior — a
-   * remote player's rendered position depends on their *own* reported mode,
-   * since "plaza" and "hub" are different regions of the same world. */
-  constructor(scene: THREE.Scene, hubOrigin: THREE.Vector3) {
+  /** `getHubOrigin` resolves a hub owner's name to that hub's private
+   * interior world-offset — a remote player's rendered position depends on
+   * their *own* reported mode and, in hub mode, *which* friend's hub they're
+   * in, since every hub is a separate pocket of the same world. */
+  constructor(scene: THREE.Scene, getHubOrigin: (hubId: string) => THREE.Vector3 | null) {
     this.scene = scene;
-    this.hubOrigin = hubOrigin;
+    this.getHubOrigin = getHubOrigin;
   }
 
   private resolveWorldPos(state: RemotePlayerState, out: THREE.Vector3): THREE.Vector3 {
     if (state.mode === 'hub') {
-      return out.set(this.hubOrigin.x + state.x, state.y, this.hubOrigin.z + state.z);
+      const origin = this.getHubOrigin(state.hubId);
+      if (origin) return out.set(origin.x + state.x, state.y, origin.z + state.z);
+      // Hub not known to this client yet (e.g. a brand-new friend who just
+      // joined) — park far away rather than misplacing them in the plaza.
+      return out.set(state.x, state.y, 10_000);
     }
     return out.set(state.x, state.y, state.z);
   }
