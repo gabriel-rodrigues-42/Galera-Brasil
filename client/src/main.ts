@@ -217,6 +217,14 @@ const lastPlazaTransform = { position: new THREE.Vector3(0, 1.7, 8), yaw: 0 };
 const controls = new PointerLockControls(camera, canvas);
 scene.add(controls.object);
 
+// PointerLockControls allows the full 0..PI pitch range by default (straight
+// up to straight down), so a single stray mouse movement can pitch the
+// camera into an all-sky (or all-ground) view with nothing to reorient by.
+// Clamp to a comfortable ±85° from the horizon like a typical FPS.
+const MAX_PITCH_FROM_HORIZON = THREE.MathUtils.degToRad(85);
+controls.minPolarAngle = Math.PI / 2 - MAX_PITCH_FROM_HORIZON;
+controls.maxPolarAngle = Math.PI / 2 + MAX_PITCH_FROM_HORIZON;
+
 // The overlay sits visually on top of the canvas while visible, so it (not
 // the canvas) is what actually receives the click that should engage pointer lock.
 overlay.addEventListener('click', () => controls.lock());
