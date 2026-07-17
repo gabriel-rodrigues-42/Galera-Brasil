@@ -280,6 +280,10 @@ const PLAZA_RADIUS = 58; // soft world boundary
 const velocity = new THREE.Vector3();
 const inputDir = new THREE.Vector3();
 
+function isDown(...codes: string[]): boolean {
+  return codes.some((code) => keys[code] === true);
+}
+
 function updateMovement(delta: number) {
   if (openPost) return; // frozen while reading a post panel
 
@@ -287,8 +291,13 @@ function updateMovement(delta: number) {
   velocity.x -= velocity.x * 8 * delta;
   velocity.z -= velocity.z * 8 * delta;
 
-  const forward = Number(keys['KeyW'] || keys['ArrowUp']) - Number(keys['KeyS'] || keys['ArrowDown']);
-  const strafe = Number(keys['KeyD'] || keys['ArrowRight']) - Number(keys['KeyA'] || keys['ArrowLeft']);
+  // NOTE: keys['KeyW'] is `undefined` (not `false`) until that key has been
+  // pressed at least once. `undefined || undefined` is `undefined`, and
+  // `Number(undefined)` is `NaN` — so the old `Number(keys[a] || keys[b])`
+  // form poisoned velocity, then position, with NaN from the very first
+  // locked frame if no key had been pressed yet. isDown() coerces properly.
+  const forward = Number(isDown('KeyW', 'ArrowUp')) - Number(isDown('KeyS', 'ArrowDown'));
+  const strafe = Number(isDown('KeyD', 'ArrowRight')) - Number(isDown('KeyA', 'ArrowLeft'));
 
   inputDir.set(strafe, 0, -forward);
   if (inputDir.lengthSq() > 0) inputDir.normalize();
@@ -459,6 +468,8 @@ let prevPitch = camera.rotation.x;
 let fps = 0;
 let fpsFrameCount = 0;
 let fpsAccum = 0;
+let nanGuardTripped = false;
+const lastGoodPosition = camera.position.clone();
 
 function animate(timestamp: number) {
   requestAnimationFrame(animate);
@@ -488,6 +499,16 @@ function animate(timestamp: number) {
   }
   prevYaw = camera.rotation.y;
   prevPitch = camera.rotation.x;
+
+  if (!nanGuardTripped && (!Number.isFinite(camera.position.x) || !Number.isFinite(camera.position.z))) {
+    nanGuardTripped = true;
+    log('error', `Camera position went non-finite: (${camera.position.x}, ${camera.position.y}, ${camera.position.z}) — recovering to last known-good spot`);
+    camera.position.set(lastGoodPosition.x, lastGoodPosition.y, lastGoodPosition.z);
+    velocity.set(0, 0, 0);
+  } else if (Number.isFinite(camera.position.x) && Number.isFinite(camera.position.z)) {
+    lastGoodPosition.copy(camera.position);
+    nanGuardTripped = false;
+  }
 
   updateStats([
     `mode=${mode}  locked=${controls.isLocked}  fps=${fps.toFixed(0)}`,
