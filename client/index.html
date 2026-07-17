@@ -25,7 +25,8 @@
       <div id="interact-hint" class="hidden"></div>
       <div id="post-panel" class="hidden">
         <div id="post-panel-content"></div>
-        <p class="panel-hint">Pressione E para fechar</p>
+        <button type="button" id="post-panel-close">Fechar</button>
+        <p class="panel-hint">Esc para fechar</p>
       </div>
       <div id="chat-log"></div>
       <input id="chat-input" class="hidden" type="text" maxlength="200" autocomplete="off" placeholder="Digite sua mensagem — Enter para enviar, Esc para cancelar" />
@@ -38,7 +39,7 @@
             <button type="submit">Publicar</button>
             <button type="button" id="add-post-cancel">Cancelar</button>
           </div>
-          <p class="panel-hint">Esc para cancelar</p>
+          <p class="panel-hint">Ctrl+Enter para publicar · Esc para cancelar</p>
         </form>
       </div>
       <div id="debug-panel">

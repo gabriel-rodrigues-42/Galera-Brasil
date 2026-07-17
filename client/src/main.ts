@@ -19,6 +19,7 @@ const overlay = document.querySelector<HTMLDivElement>('#overlay')!;
 const hintEl = document.querySelector<HTMLDivElement>('#interact-hint')!;
 const panelEl = document.querySelector<HTMLDivElement>('#post-panel')!;
 const panelContentEl = document.querySelector<HTMLDivElement>('#post-panel-content')!;
+const panelCloseEl = document.querySelector<HTMLButtonElement>('#post-panel-close')!;
 const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
 const debugStatsEl = document.querySelector<HTMLPreElement>('#debug-stats')!;
 const debugLogEl = document.querySelector<HTMLPreElement>('#debug-log')!;
@@ -294,6 +295,44 @@ function requestLock() {
   });
 }
 
+// Some UI panels (the post-detail view, the add-post form) have real
+// clickable elements — but the mouse is captured for camera-look the whole
+// time we're locked, so there's no visible cursor to click them with. Release
+// the lock while those are open (without falling back to the start screen,
+// which the normal 'unlock' handler below does for a genuine Escape-to-pause)
+// and re-acquire it when they close. Movement/interaction updates are gated
+// on controls.isLocked, so releasing also (correctly) freezes the game loop
+// while one of these panels is open — the E-to-close path inside
+// updateInteraction can no longer fire once that happens, so closing instead
+// goes through an explicit button click or the dedicated Escape listener
+// below, both of which call resumeAfterUI() themselves.
+let suppressUnlockOverlay = false;
+let pointerReleasedForUI = false;
+
+function releasePointerForUI() {
+  if (!controls.isLocked) return;
+  pointerReleasedForUI = true;
+  suppressUnlockOverlay = true;
+  document.exitPointerLock();
+  document.body.classList.remove('locked');
+}
+
+function resumeAfterUI() {
+  if (!pointerReleasedForUI) return;
+  pointerReleasedForUI = false;
+  requestLock();
+}
+
+// Escape while a panel released the pointer (see above) doesn't trigger the
+// browser's native pointer-lock-exit path — there's no lock to exit — so it
+// needs its own listener rather than relying on the 'unlock' event.
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'Escape' || !pointerReleasedForUI) return;
+  if (openPost) closePostPanel();
+  if (addPostOpen) closeAddPostForm();
+  resumeAfterUI();
+});
+
 // The overlay sits visually on top of the canvas while visible, so it (not
 // the canvas) is what actually receives the click that should engage pointer
 // lock — only meaningful once already connected (the join form handles the
@@ -313,6 +352,11 @@ controls.addEventListener('lock', () => {
   );
 });
 controls.addEventListener('unlock', () => {
+  if (suppressUnlockOverlay) {
+    suppressUnlockOverlay = false;
+    log('info', 'pointer lock released for a UI panel (cursor visible, panel stays open)');
+    return;
+  }
   overlay.classList.remove('hidden');
   document.body.classList.remove('locked');
   hintEl.classList.add('hidden');
@@ -369,6 +413,7 @@ function openAddPostForm() {
   postTitleInputEl.value = '';
   postBodyInputEl.value = '';
   postTitleInputEl.focus();
+  releasePointerForUI(); // let the mouse click Publicar/Cancelar
 }
 
 function closeAddPostForm() {
@@ -378,11 +423,23 @@ function closeAddPostForm() {
   postBodyInputEl.blur();
 }
 
+// Ctrl/Cmd+Enter submits from either field (title or the multi-line body,
+// where plain Enter has to stay a newline) — a keyboard path for players who
+// don't want to reach for the mouse now that it's been released above.
 addPostFormEl.addEventListener('keydown', (e) => {
   e.stopPropagation();
-  if (e.code === 'Escape') closeAddPostForm();
+  if (e.code === 'Escape') {
+    closeAddPostForm();
+    resumeAfterUI();
+  } else if (e.code === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    addPostFormEl.requestSubmit();
+  }
 });
-addPostCancelEl.addEventListener('click', () => closeAddPostForm());
+addPostCancelEl.addEventListener('click', () => {
+  closeAddPostForm();
+  resumeAfterUI();
+});
 
 addPostFormEl.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -396,6 +453,7 @@ addPostFormEl.addEventListener('submit', (e) => {
     .then(() => {
       log('info', `post added to hub "${currentHubOwner}": "${title}"`);
       closeAddPostForm();
+      resumeAfterUI();
     })
     .catch((err) => log('error', `failed to add post: ${err}`));
 });
@@ -523,6 +581,7 @@ function openPostPanel(post: HubPost) {
   panelContentEl.innerHTML = renderPostPanel(post);
   panelEl.classList.remove('hidden');
   velocity.set(0, 0, 0);
+  releasePointerForUI(); // lets the mouse click a link post's URL or the Fechar button
   log('info', `post panel opened: ${post.type}/${post.id}`);
 }
 
@@ -531,6 +590,11 @@ function closePostPanel() {
   panelEl.classList.add('hidden');
   log('info', 'post panel closed');
 }
+
+panelCloseEl.addEventListener('click', () => {
+  closePostPanel();
+  resumeAfterUI();
+});
 
 async function enterHub(owner: string) {
   if (hubTransitionInFlight) return;
@@ -623,7 +687,14 @@ function updateInteraction() {
 
   if (eJustPressed) {
     if (openPost) {
+      // Normally unreachable — opening a post releases pointer lock, which
+      // stops updateInteraction from running at all — but exitPointerLock()
+      // is asynchronous, so a fast second E-press could still land here in
+      // the brief window before that takes effect. Keep it in sync with the
+      // real close paths (Fechar button, Escape) rather than leaving it as
+      // dead code that quietly forgets to resume the pointer lock.
       closePostPanel();
+      resumeAfterUI();
     } else if (hovered) {
       openPostPanel(hovered.post);
     } else if (mode === 'plaza' && nearEntranceOwner) {
