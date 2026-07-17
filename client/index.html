@@ -11,8 +11,15 @@
       <canvas id="scene"></canvas>
       <div id="overlay">
         <h1>Galera Brasil</h1>
-        <p>Clique para entrar na praça</p>
-        <p class="hint">WASD para andar · Mouse para olhar · E para interagir · Esc para sair</p>
+        <form id="join-form">
+          <input id="name-input" type="text" placeholder="Seu nome" maxlength="24" autocomplete="off" />
+          <button type="submit">Entrar</button>
+        </form>
+        <p id="join-status"></p>
+        <div id="resume-block" class="hidden">
+          <p>Clique para continuar</p>
+        </div>
+        <p class="hint">WASD para andar · Mouse para olhar · E para interagir · Enter para conversar · Esc para pausar</p>
       </div>
       <div id="crosshair"></div>
       <div id="interact-hint" class="hidden"></div>
@@ -20,6 +27,8 @@
         <div id="post-panel-content"></div>
         <p class="panel-hint">Pressione E para fechar</p>
       </div>
+      <div id="chat-log"></div>
+      <input id="chat-input" class="hidden" type="text" maxlength="200" autocomplete="off" placeholder="Digite sua mensagem — Enter para enviar, Esc para cancelar" />
       <div id="debug-panel">
         <div class="debug-title">DEBUG (~ para esconder)</div>
         <pre id="debug-stats"></pre>

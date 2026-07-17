@@ -4,6 +4,8 @@ import { buildHub, ROOM_HALF, HUB_EXIT_ZONE, type Interactable } from './hub-bui
 import { demoHub } from './hub-content';
 import type { HubPost } from './hub-types';
 import { log, initDebugPanel, updateStats, installGlobalErrorLogging } from './logger';
+import { Network } from './network';
+import { AvatarManager } from './avatars';
 import './style.css';
 
 installGlobalErrorLogging();
@@ -19,6 +21,12 @@ const panelContentEl = document.querySelector<HTMLDivElement>('#post-panel-conte
 const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
 const debugStatsEl = document.querySelector<HTMLPreElement>('#debug-stats')!;
 const debugLogEl = document.querySelector<HTMLPreElement>('#debug-log')!;
+const joinFormEl = document.querySelector<HTMLFormElement>('#join-form')!;
+const nameInputEl = document.querySelector<HTMLInputElement>('#name-input')!;
+const joinStatusEl = document.querySelector<HTMLParagraphElement>('#join-status')!;
+const resumeBlockEl = document.querySelector<HTMLDivElement>('#resume-block')!;
+const chatLogEl = document.querySelector<HTMLDivElement>('#chat-log')!;
+const chatInputEl = document.querySelector<HTMLInputElement>('#chat-input')!;
 initDebugPanel(debugLogEl, debugStatsEl);
 
 window.addEventListener('keydown', (e) => {
@@ -225,6 +233,51 @@ let mode: Mode = 'plaza';
 let openPost: HubPost | null = null;
 const lastPlazaTransform = { position: new THREE.Vector3(0, 1.7, 8), yaw: 0 };
 
+// --- Multiplayer: networking, remote avatars, chat -----------------------------
+
+function getServerUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  // Dev mode: Vite serves the client on 5173, but the game server runs on
+  // 2567. In production the server serves the built client itself, so the
+  // websocket is same-origin — this one function covers both cases.
+  const isDev = window.location.port === '5173';
+  const host = isDev ? `${window.location.hostname}:2567` : window.location.host;
+  return `${protocol}://${host}`;
+}
+
+const network = new Network(getServerUrl());
+const avatarManager = new AvatarManager(scene, HUB_INTERIOR_ORIGIN);
+let connected = false;
+
+const MAX_CHAT_LINES = 8;
+function appendChatLine(name: string, text: string, isSystem = false) {
+  const line = document.createElement('div');
+  line.className = isSystem ? 'chat-line system' : 'chat-line';
+  if (isSystem) {
+    line.textContent = text;
+  } else {
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'chat-name';
+    nameSpan.textContent = `${name}: `;
+    line.appendChild(nameSpan);
+    line.appendChild(document.createTextNode(text));
+  }
+  chatLogEl.appendChild(line);
+  while (chatLogEl.children.length > MAX_CHAT_LINES) {
+    chatLogEl.removeChild(chatLogEl.firstChild!);
+  }
+}
+
+network.onPlayerAdd = (sessionId, state) => avatarManager.add(sessionId, state);
+network.onPlayerChange = (sessionId, state) => avatarManager.updateTarget(sessionId, state);
+network.onPlayerRemove = (sessionId) => avatarManager.remove(sessionId);
+network.onChat = (event) => {
+  appendChatLine(event.name, event.text);
+  avatarManager.showChatBubble(event.sessionId, event.text, performance.now() / 1000);
+};
+network.onSystem = (text) => appendChatLine('', text, true);
+network.onDisconnected = (reason) => appendChatLine('', `Desconectado do servidor (${reason})`, true);
+
 // --- Player controls: pointer lock + WASD ---------------------------------------
 
 const controls = new PointerLockControls(camera, canvas);
@@ -238,9 +291,41 @@ const MAX_PITCH_FROM_HORIZON = THREE.MathUtils.degToRad(85);
 controls.minPolarAngle = Math.PI / 2 - MAX_PITCH_FROM_HORIZON;
 controls.maxPolarAngle = Math.PI / 2 + MAX_PITCH_FROM_HORIZON;
 
+const SAVED_NAME_KEY = 'galera-brasil-name';
+nameInputEl.value = localStorage.getItem(SAVED_NAME_KEY) ?? '';
+
+joinFormEl.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = nameInputEl.value.trim().slice(0, 24) || `Visitante${Math.floor(Math.random() * 900 + 100)}`;
+  const submitBtn = joinFormEl.querySelector('button')!;
+  submitBtn.disabled = true;
+  nameInputEl.disabled = true;
+  joinStatusEl.textContent = 'Conectando...';
+
+  network
+    .connect(name)
+    .then(() => {
+      localStorage.setItem(SAVED_NAME_KEY, name);
+      connected = true;
+      joinFormEl.classList.add('hidden');
+      joinStatusEl.textContent = '';
+      resumeBlockEl.classList.remove('hidden');
+      controls.lock();
+    })
+    .catch((err) => {
+      log('error', `failed to connect: ${err}`);
+      joinStatusEl.textContent = 'Não foi possível conectar ao servidor. Tente novamente.';
+      submitBtn.disabled = false;
+      nameInputEl.disabled = false;
+    });
+});
+
 // The overlay sits visually on top of the canvas while visible, so it (not
-// the canvas) is what actually receives the click that should engage pointer lock.
-overlay.addEventListener('click', () => {
+// the canvas) is what actually receives the click that should engage pointer
+// lock — only meaningful once already connected (the join form handles the
+// first connection, via its submit handler above).
+overlay.addEventListener('click', (e) => {
+  if (!connected || e.target === nameInputEl || (e.target as HTMLElement).closest('#join-form')) return;
   log('info', `overlay clicked, requesting pointer lock (document.hasFocus=${document.hasFocus()}, visibilityState=${document.visibilityState})`);
   controls.lock();
 });
@@ -258,6 +343,7 @@ controls.addEventListener('unlock', () => {
   document.body.classList.remove('locked');
   hintEl.classList.add('hidden');
   closePostPanel();
+  closeChatInput();
   log('info', 'pointer lock RELEASED');
 });
 // PointerLockControls logs this to console itself but doesn't expose it as a
@@ -266,11 +352,43 @@ document.addEventListener('pointerlockerror', () => {
   log('error', 'pointerlockerror: browser refused the pointer lock request');
 });
 
+// --- Proximity chat -------------------------------------------------------------
+
+let chatInputOpen = false;
+
+function openChatInput() {
+  chatInputOpen = true;
+  Object.keys(keys).forEach((code) => (keys[code] = false)); // don't keep sliding on stale held keys
+  chatInputEl.classList.remove('hidden');
+  chatInputEl.value = '';
+  chatInputEl.focus();
+}
+
+function closeChatInput() {
+  chatInputOpen = false;
+  chatInputEl.classList.add('hidden');
+  chatInputEl.blur();
+}
+
+// stopPropagation keeps every keystroke typed here from also reaching the
+// window-level game-input listener below (movement keys, E-to-interact, etc).
+chatInputEl.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.code === 'Enter') {
+    const text = chatInputEl.value.trim();
+    if (text) network.sendChat(text);
+    closeChatInput();
+  } else if (e.code === 'Escape') {
+    closeChatInput();
+  }
+});
+
 const keys: Record<string, boolean> = {};
 let eJustPressed = false;
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'KeyE') eJustPressed = true;
+  if (e.code === 'Enter' && controls.isLocked && !openPost && !chatInputOpen) openChatInput();
 });
 window.addEventListener('keyup', (e) => (keys[e.code] = false));
 
@@ -285,7 +403,7 @@ function isDown(...codes: string[]): boolean {
 }
 
 function updateMovement(delta: number) {
-  if (openPost) return; // frozen while reading a post panel
+  if (openPost || chatInputOpen) return; // frozen while reading a post panel or typing chat
 
   // Damping
   velocity.x -= velocity.x * 8 * delta;
@@ -406,6 +524,11 @@ function exitHub() {
 }
 
 function updateInteraction() {
+  if (chatInputOpen) {
+    hintEl.classList.add('hidden');
+    return;
+  }
+
   let hint = '';
   let hovered: Interactable | null = null;
   let nearEntrance = false;
@@ -471,6 +594,9 @@ let fpsAccum = 0;
 let nanGuardTripped = false;
 const lastGoodPosition = camera.position.clone();
 
+const SEND_INTERVAL = 1 / 15; // 15Hz is plenty for walking-speed avatars
+let sendAccum = 0;
+
 function animate(timestamp: number) {
   requestAnimationFrame(animate);
   timer.update(timestamp);
@@ -487,6 +613,14 @@ function animate(timestamp: number) {
   if (controls.isLocked) {
     updateMovement(delta);
     updateInteraction();
+
+    sendAccum += delta;
+    if (connected && sendAccum >= SEND_INTERVAL) {
+      sendAccum = 0;
+      const localX = mode === 'hub' ? camera.position.x - HUB_INTERIOR_ORIGIN.x : camera.position.x;
+      const localZ = mode === 'hub' ? camera.position.z - HUB_INTERIOR_ORIGIN.z : camera.position.z;
+      network.sendMove(localX, camera.position.y, localZ, camera.rotation.y, mode);
+    }
 
     // Flag any single-frame rotation big enough to plausibly explain "camera
     // suddenly stuck looking at the sky" — e.g. a cursor-warp artifact right
@@ -510,11 +644,14 @@ function animate(timestamp: number) {
     nanGuardTripped = false;
   }
 
+  avatarManager.update(delta, timestamp / 1000);
+
   updateStats([
     `mode=${mode}  locked=${controls.isLocked}  fps=${fps.toFixed(0)}`,
     `pos=(${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`,
     `rot yaw=${THREE.MathUtils.radToDeg(camera.rotation.y).toFixed(1)}°  pitch=${THREE.MathUtils.radToDeg(camera.rotation.x).toFixed(1)}°`,
     `scene.children=${scene.children.length}  openPost=${openPost ? openPost.id : 'none'}`,
+    `connected=${connected}  sessionId=${network.sessionId || 'none'}  remotePlayers=${avatarManager.count}`,
   ]);
 
   beacon.rotation.y += delta * 1.2;

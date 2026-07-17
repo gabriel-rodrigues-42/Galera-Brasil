@@ -75,6 +75,105 @@ body {
   opacity: 0.7;
 }
 
+#join-form {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+#join-form input {
+  font: inherit;
+  font-size: 1rem;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(244, 241, 232, 0.4);
+  background: rgba(0, 0, 0, 0.3);
+  color: #f4f1e8;
+  outline: none;
+  width: 220px;
+}
+
+#join-form input:focus {
+  border-color: #ffcf5c;
+}
+
+#join-form button {
+  font: inherit;
+  font-size: 1rem;
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: none;
+  background: #ffcf5c;
+  color: #241a06;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#join-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+#join-status {
+  min-height: 1.2em;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+#resume-block {
+  cursor: pointer;
+}
+
+#resume-block.hidden {
+  display: none;
+}
+
+#chat-log {
+  position: absolute;
+  left: 10px;
+  bottom: 60px;
+  max-width: min(420px, 60vw);
+  max-height: 30vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.9rem;
+  color: #f4f1e8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+#chat-log .chat-line .chat-name {
+  color: #ffcf5c;
+  font-weight: 700;
+}
+
+#chat-log .chat-line.system {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+#chat-input {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+  width: min(480px, 70vw);
+  font: inherit;
+  font-size: 1rem;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(244, 241, 232, 0.5);
+  background: rgba(0, 0, 0, 0.75);
+  color: #f4f1e8;
+  outline: none;
+}
+
+#chat-input.hidden {
+  display: none;
+}
+
 #crosshair {
   position: absolute;
   top: 50%;

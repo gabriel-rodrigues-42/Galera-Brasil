@@ -108,3 +108,36 @@ export function makeLinkLabelTexture(label: string): THREE.CanvasTexture {
     ctx.fillText(label, 256, 80, 480);
   });
 }
+
+/** Floating name tag shown above a remote player's avatar. */
+export function makeNameTagTexture(name: string, accentColor: string): THREE.CanvasTexture {
+  return makeCanvasTexture(256, 64, (ctx) => {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(0, 8, 256, 48, 12);
+    ctx.fill();
+    ctx.fillStyle = accentColor;
+    ctx.beginPath();
+    ctx.arc(28, 32, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f4f1e8';
+    ctx.font = '700 24px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name, 48, 33, 196);
+  });
+}
+
+/** Short-lived speech bubble shown above an avatar when they send a chat message. */
+export function makeChatBubbleTexture(text: string): THREE.CanvasTexture {
+  return makeCanvasTexture(384, 96, (ctx) => {
+    ctx.fillStyle = 'rgba(244, 241, 232, 0.95)';
+    ctx.beginPath();
+    ctx.roundRect(4, 4, 376, 80, 14);
+    ctx.fill();
+    ctx.fillStyle = '#1c1c22';
+    ctx.font = '500 22px system-ui, sans-serif';
+    ctx.textBaseline = 'top';
+    wrapText(ctx, text, 18, 20, 348, 26);
+  });
+}
