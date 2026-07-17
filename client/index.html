@@ -28,6 +28,23 @@
         <button type="button" id="post-panel-close">Fechar</button>
         <p class="panel-hint">Esc para fechar</p>
       </div>
+      <div id="npc-panel" class="hidden">
+        <h2 id="npc-panel-name">Nome do NPC</h2>
+        <div id="npc-panel-dialogue">
+          <p id="npc-panel-text">Carregando...</p>
+        </div>
+        <div id="npc-panel-sticker-reward" class="hidden"></div>
+        <div class="npc-panel-actions">
+          <button type="button" id="npc-btn-action">Interagir</button>
+          <button type="button" id="npc-btn-sticker">Reivindicar Sticker</button>
+          <button type="button" id="npc-panel-close">Fechar</button>
+        </div>
+        <div id="npc-panel-stickers-section">
+          <h3>Seus Stickers:</h3>
+          <div id="npc-panel-stickers-list"></div>
+        </div>
+        <p class="panel-hint">Esc para fechar</p>
+      </div>
       <div id="chat-log"></div>
       <input id="chat-input" class="hidden" type="text" maxlength="200" autocomplete="off" placeholder="Digite sua mensagem — Enter para enviar, Esc para cancelar" />
       <div id="add-post-panel" class="hidden">

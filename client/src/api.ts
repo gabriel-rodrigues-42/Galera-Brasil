@@ -48,3 +48,40 @@ export function addPost(owner: string, post: NewPostInput): Promise<HubPost> {
     body: JSON.stringify(post),
   });
 }
+
+// --- NPC & Sticker API calls ---------------------------------------------------
+
+export interface NpcDialogueResponse {
+  npc_type: 'robot' | 'joker' | 'romance';
+  category: string;
+  content: string;
+}
+
+export interface StickerDef {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  npcType: 'robot' | 'joker' | 'romance';
+}
+
+export interface StickerClaimResponse {
+  success: boolean;
+  sticker?: StickerDef;
+  error?: 'cooldown' | 'already_all' | 'unknown_npc' | 'not_found';
+  remainingTimeMs?: number;
+}
+
+export function getRandomNpcDialogue(npcType: string): Promise<NpcDialogueResponse> {
+  return apiFetch(`/api/npcs/dialogue/${encodeURIComponent(npcType)}`);
+}
+
+export function getPlayerStickers(playerName: string): Promise<string[]> {
+  return apiFetch(`/api/players/${encodeURIComponent(playerName)}/stickers`);
+}
+
+export function claimNpcSticker(playerName: string, npcType: string): Promise<StickerClaimResponse> {
+  return apiFetch(`/api/players/${encodeURIComponent(playerName)}/stickers/claim/${encodeURIComponent(npcType)}`, {
+    method: 'POST'
+  });
+}

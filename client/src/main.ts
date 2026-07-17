@@ -6,6 +6,7 @@ import type { HubPost } from './hub-types';
 import { log, initDebugPanel, updateStats, installGlobalErrorLogging } from './logger';
 import { Network } from './network';
 import { AvatarManager } from './avatars';
+import { NpcManager, type NpcDef } from './npc-manager';
 import * as api from './api';
 import './style.css';
 
@@ -34,6 +35,17 @@ const addPostFormEl = document.querySelector<HTMLFormElement>('#add-post-form')!
 const postTitleInputEl = document.querySelector<HTMLInputElement>('#post-title-input')!;
 const postBodyInputEl = document.querySelector<HTMLTextAreaElement>('#post-body-input')!;
 const addPostCancelEl = document.querySelector<HTMLButtonElement>('#add-post-cancel')!;
+
+// NPC UI selectors
+const npcPanelEl = document.querySelector<HTMLDivElement>('#npc-panel')!;
+const npcPanelNameEl = document.querySelector<HTMLHeadingElement>('#npc-panel-name')!;
+const npcPanelTextEl = document.querySelector<HTMLParagraphElement>('#npc-panel-text')!;
+const npcPanelRewardEl = document.querySelector<HTMLDivElement>('#npc-panel-sticker-reward')!;
+const npcBtnActionEl = document.querySelector<HTMLButtonElement>('#npc-btn-action')!;
+const npcBtnStickerEl = document.querySelector<HTMLButtonElement>('#npc-btn-sticker')!;
+const npcPanelCloseEl = document.querySelector<HTMLButtonElement>('#npc-panel-close')!;
+const npcStickersListEl = document.querySelector<HTMLDivElement>('#npc-panel-stickers-list')!;
+
 initDebugPanel(debugLogEl, debugStatsEl);
 
 window.addEventListener('keydown', (e) => {
@@ -180,12 +192,16 @@ scene.add(makeSolarCanopy(0, 6, Math.PI / 2));
 const hubManager = new HubManager(scene);
 hubManager.refreshList().catch((err) => log('error', `failed to load hub list: ${err}`));
 
+const npcManager = new NpcManager(scene);
+
 type Mode = 'plaza' | 'hub';
 let mode: Mode = 'plaza';
 let currentHubOwner: string | null = null;
 let hubTransitionInFlight = false;
 let myName = '';
 let openPost: HubPost | null = null;
+let openNpc: NpcDef | null = null;
+let stickersCollected: string[] = [];
 const lastPlazaTransform = { position: new THREE.Vector3(0, 1.7, 8), yaw: 0 };
 
 // --- Multiplayer: networking, remote avatars, chat -----------------------------
@@ -269,6 +285,13 @@ joinFormEl.addEventListener('submit', (e) => {
       joinStatusEl.textContent = '';
       resumeBlockEl.classList.remove('hidden');
       requestLock();
+
+      api.getPlayerStickers(name)
+        .then((stickers) => {
+          stickersCollected = stickers;
+          log('info', `loaded player stickers: ${stickers.join(', ')}`);
+        })
+        .catch((err) => log('error', `failed to load player stickers: ${err}`));
     })
     .catch((err) => {
       log('error', `failed to connect: ${err}`);
@@ -329,6 +352,7 @@ function resumeAfterUI() {
 window.addEventListener('keydown', (e) => {
   if (e.code !== 'Escape' || !pointerReleasedForUI) return;
   if (openPost) closePostPanel();
+  if (openNpc) closeNpcPanel();
   if (addPostOpen) closeAddPostForm();
   resumeAfterUI();
 });
@@ -361,6 +385,7 @@ controls.addEventListener('unlock', () => {
   document.body.classList.remove('locked');
   hintEl.classList.add('hidden');
   closePostPanel();
+  closeNpcPanel();
   closeChatInput();
   closeAddPostForm();
   log('info', 'pointer lock RELEASED');
@@ -631,6 +656,121 @@ function exitHub() {
   log('info', `exited hub — restored to (${controls.object.position.x.toFixed(2)}, ${controls.object.position.y.toFixed(2)}, ${controls.object.position.z.toFixed(2)})`);
 }
 
+// --- NPC & Sticker Panel UI Handlers -------------------------------------------
+
+const STICKERS = [
+  { id: 'sticker_robot_1', name: 'Microchip de Ouro', emoji: '🪙', description: 'Concedido pelo Robô por dominar atalhos do PC.', npcType: 'robot' },
+  { id: 'sticker_robot_2', name: 'Fibra Óptica Express', emoji: '⚡', description: 'Concedido pelo Robô por demonstrar conexão rápida.', npcType: 'robot' },
+  { id: 'sticker_robot_3', name: 'Super Antena 5G', emoji: '📡', description: 'Concedido pelo Robô por captar excelentes dicas.', npcType: 'robot' },
+  { id: 'sticker_joker_1', name: 'Risada Suprema', emoji: '🎭', description: 'Concedido pelo Coringa após ouvir uma ótima piada.', npcType: 'joker' },
+  { id: 'sticker_joker_2', name: 'Buzina Maluca', emoji: '📯', description: 'Concedido pelo Coringa por espalhar bom humor.', npcType: 'joker' },
+  { id: 'sticker_joker_3', name: 'Torta Flutuante', emoji: '🥧', description: 'Concedido pelo Coringa por sobreviver ao stand-up.', npcType: 'joker' },
+  { id: 'sticker_romance_1', name: 'Flecha do Cupido', emoji: '💘', description: 'Concedido pelo Romântico por demonstrar carisma.', npcType: 'romance' },
+  { id: 'sticker_romance_2', name: 'Coração Pixelado', emoji: '💖', description: 'Concedido pelo Romântico para corações apaixonados.', npcType: 'romance' },
+  { id: 'sticker_romance_3', name: 'Poção do Amor', emoji: '🧪', description: 'Concedido pelo Romântico para encontros perfeitos.', npcType: 'romance' },
+];
+
+function renderStickerAlbum(npcType: 'robot' | 'joker' | 'romance') {
+  const npcStickers = STICKERS.filter((s) => s.npcType === npcType);
+  npcStickersListEl.innerHTML = npcStickers
+    .map((sticker) => {
+      const isUnlocked = stickersCollected.includes(sticker.id);
+      const klass = isUnlocked ? 'sticker-item unlocked' : 'sticker-item locked';
+      return `
+        <div class="${klass}" title="${sticker.description}">
+          <div class="sticker-emoji">${sticker.emoji}</div>
+          <div class="sticker-name">${sticker.name}</div>
+          <div class="sticker-desc">${sticker.description}</div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function openNpcPanel(npc: NpcDef) {
+  openNpc = npc;
+  npcPanelNameEl.textContent = npc.displayName;
+  npcPanelRewardEl.classList.add('hidden');
+  npcPanelRewardEl.textContent = '';
+  
+  if (npc.id === 'robot') {
+    npcBtnActionEl.textContent = 'Pedir Dica';
+    npcPanelTextEl.textContent = 'Olá! Eu sou o Robô da Net. Quer aprender algum atalho ou truque de computador?';
+  } else if (npc.id === 'joker') {
+    npcBtnActionEl.textContent = 'Pedir Piada';
+    npcPanelTextEl.textContent = 'Olá! Eu sou o Coringa do Feirão. Preparado para dar umas risadas?';
+  } else {
+    npcBtnActionEl.textContent = 'Pedir Cantada / Encontro';
+    npcPanelTextEl.textContent = 'Olá! Eu sou o Cupido Solarpunk. Procurando ideias de encontros ou cantadas românticas?';
+  }
+
+  renderStickerAlbum(npc.id);
+  npcPanelEl.classList.remove('hidden');
+  velocity.set(0, 0, 0);
+  releasePointerForUI();
+  log('info', `NPC panel opened: ${npc.id}`);
+}
+
+function closeNpcPanel() {
+  openNpc = null;
+  npcPanelEl.classList.add('hidden');
+  log('info', 'NPC panel closed');
+}
+
+npcPanelCloseEl.addEventListener('click', () => {
+  closeNpcPanel();
+  resumeAfterUI();
+});
+
+npcBtnActionEl.addEventListener('click', () => {
+  if (!openNpc) return;
+  npcPanelRewardEl.classList.add('hidden');
+  
+  api.getRandomNpcDialogue(openNpc.id)
+    .then((res) => {
+      npcPanelTextEl.textContent = res.content;
+      log('info', `Fetched dialogue for ${openNpc?.id}: ${res.content}`);
+    })
+    .catch((err) => {
+      log('error', `Failed to fetch NPC dialogue: ${err}`);
+      npcPanelTextEl.textContent = 'Ops, deu um erro de conexão ao falar com o NPC!';
+    });
+});
+
+npcBtnStickerEl.addEventListener('click', () => {
+  if (!openNpc || !myName) return;
+  
+  api.claimNpcSticker(myName, openNpc.id)
+    .then((res) => {
+      if (res.success && res.sticker) {
+        if (!stickersCollected.includes(res.sticker.id)) {
+          stickersCollected.push(res.sticker.id);
+        }
+        renderStickerAlbum(openNpc!.id);
+        npcPanelRewardEl.innerHTML = `🎉 <strong>Sticker Desbloqueado!</strong> Você ganhou o sticker <strong>${res.sticker.emoji} ${res.sticker.name}</strong>!<br><span style="font-size:0.85rem">${res.sticker.description}</span>`;
+        npcPanelRewardEl.classList.remove('hidden');
+        log('info', `Claimed sticker ${res.sticker.id}`);
+      } else if (res.error === 'cooldown') {
+        const secs = Math.ceil((res.remainingTimeMs ?? 0) / 1000);
+        npcPanelRewardEl.innerHTML = `⏳ <strong>Calma lá!</strong> O NPC está descansando. Tente novamente em <strong>${secs}s</strong>.`;
+        npcPanelRewardEl.classList.remove('hidden');
+      } else if (res.error === 'already_all') {
+        npcPanelRewardEl.innerHTML = `🏆 <strong>Álbum Cheio!</strong> Você já coletou todos os stickers de ${openNpc?.displayName}!`;
+        npcPanelRewardEl.classList.remove('hidden');
+      } else {
+        npcPanelRewardEl.innerHTML = `❌ Erro ao reivindicar: ${res.error}`;
+        npcPanelRewardEl.classList.remove('hidden');
+      }
+    })
+    .catch((err) => {
+      log('error', `Failed to claim sticker: ${err}`);
+      npcPanelRewardEl.innerHTML = `❌ Erro de conexão com o servidor.`;
+      npcPanelRewardEl.classList.remove('hidden');
+    });
+});
+
+// --- updateInteraction ---------------------------------------------------------
+
 function updateInteraction() {
   if (chatInputOpen || addPostOpen) {
     hintEl.classList.add('hidden');
@@ -639,6 +779,7 @@ function updateInteraction() {
 
   let hint = '';
   let hovered: Interactable | null = null;
+  let hoveredNpc: NpcDef | null = null;
   let nearEntranceOwner: string | null = null;
   let nearExit = false;
   let isOwnHub = false;
@@ -647,6 +788,17 @@ function updateInteraction() {
     if (!hubTransitionInFlight) {
       const nearHub = hubManager.findNearestEntrance(controls.object.position.x, controls.object.position.z);
       nearEntranceOwner = nearHub?.owner ?? null;
+    }
+    
+    // Raycast against NPCs in plaza
+    if (!nearEntranceOwner && !openNpc && !openPost) {
+      camera.getWorldPosition(raycastOrigin);
+      camera.getWorldDirection(raycastDir);
+      raycaster.set(raycastOrigin, raycastDir);
+      const hits = raycaster.intersectObjects(npcManager.getInteractables(), true);
+      if (hits.length > 0 && hits[0].distance <= INTERACT_DISTANCE) {
+        hoveredNpc = npcManager.getNpcByObject(hits[0].object);
+      }
     }
   } else if (currentHubOwner) {
     const origin = hubManager.originFor(currentHubOwner);
@@ -672,8 +824,12 @@ function updateInteraction() {
 
   if (openPost) {
     hint = 'Pressione E para fechar';
+  } else if (openNpc) {
+    hint = 'Pressione E para fechar';
   } else if (hovered) {
     hint = `Pressione E — ${hovered.label}`;
+  } else if (hoveredNpc) {
+    hint = `Pressione E para falar com ${hoveredNpc.displayName}`;
   } else if (nearEntranceOwner) {
     hint = `Pressione E para entrar no hub de ${nearEntranceOwner}`;
   } else if (nearExit) {
@@ -687,16 +843,15 @@ function updateInteraction() {
 
   if (eJustPressed) {
     if (openPost) {
-      // Normally unreachable — opening a post releases pointer lock, which
-      // stops updateInteraction from running at all — but exitPointerLock()
-      // is asynchronous, so a fast second E-press could still land here in
-      // the brief window before that takes effect. Keep it in sync with the
-      // real close paths (Fechar button, Escape) rather than leaving it as
-      // dead code that quietly forgets to resume the pointer lock.
       closePostPanel();
+      resumeAfterUI();
+    } else if (openNpc) {
+      closeNpcPanel();
       resumeAfterUI();
     } else if (hovered) {
       openPostPanel(hovered.post);
+    } else if (hoveredNpc) {
+      openNpcPanel(hoveredNpc);
     } else if (mode === 'plaza' && nearEntranceOwner) {
       enterHub(nearEntranceOwner);
     } else if (mode === 'hub' && nearExit) {
@@ -771,6 +926,7 @@ function animate(timestamp: number) {
   }
 
   avatarManager.update(delta, timestamp / 1000);
+  npcManager.update(delta, timestamp / 1000);
 
   updateStats([
     `mode=${mode}  locked=${controls.isLocked}  fps=${fps.toFixed(0)}`,
