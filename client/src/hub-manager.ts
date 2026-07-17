@@ -43,7 +43,7 @@ export interface HubFacade {
 
 export { ROOM_HALF };
 
-function disposeObject3D(root: THREE.Object3D) {
+export function disposeObject3D(root: THREE.Object3D) {
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh & THREE.Sprite;
     if (mesh.geometry) mesh.geometry.dispose();

@@ -91,6 +91,42 @@
         <pre id="debug-stats"></pre>
         <pre id="debug-log"></pre>
       </div>
+      <!-- Game Master Badge and Panel -->
+      <div id="gm-help-badge" class="hidden">
+        <span class="gm-icon">🛠️</span>
+        <span class="gm-text">Game Master (B)</span>
+      </div>
+      <div id="gm-panel" class="hidden">
+        <div id="gm-panel-content">
+          <h2>Painel do Game Master</h2>
+          <p class="subtitle">
+            Use este painel para respawnar os elementos do cenário em tempo real.
+          </p>
+          <div class="gm-section">
+            <button type="button" id="gm-btn-npcs" class="gm-action-btn">
+              <span class="btn-icon">🤖</span> Respawnar NPCs
+            </button>
+            <button type="button" id="gm-btn-trees" class="gm-action-btn">
+              <span class="btn-icon">🌳</span> Respawnar Árvores
+            </button>
+            <button type="button" id="gm-btn-canopies" class="gm-action-btn">
+              <span class="btn-icon">☀️</span> Respawnar Tendas
+            </button>
+            <button type="button" id="gm-btn-lake" class="gm-action-btn">
+              <span class="btn-icon">💧</span> Respawnar Lago & Deck
+            </button>
+            <button type="button" id="gm-btn-all" class="gm-action-btn primary">
+              <span class="btn-icon">🔄</span> Respawnar Tudo
+            </button>
+          </div>
+          <div class="gm-panel-actions">
+            <button type="button" id="gm-panel-close">Fechar</button>
+          </div>
+          <p class="panel-hint">
+            Atalho: Pressione <strong>B</strong> para abrir/fechar · Esc para fechar
+          </p>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

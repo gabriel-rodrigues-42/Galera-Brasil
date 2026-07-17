@@ -274,4 +274,9 @@ export class NpcManager {
     });
     this.npcInstances = [];
   }
+
+  respawn() {
+    this.destroy();
+    this.init();
+  }
 }
