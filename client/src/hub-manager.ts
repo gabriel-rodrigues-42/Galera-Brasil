@@ -15,6 +15,23 @@ const FACADE_COLORS = [
   0xe07a5f, 0x81b29a, 0xf2cc8f, 0x3d405b, 0xe8a798, 0xffb997, 0x8ecae6, 0xc9ada7,
 ];
 
+// Shared geometries to minimize draw calls and conserve memory
+const facadeBodyGeometry = new THREE.BoxGeometry(3, 2.4, 3);
+const facadeRoofGeometry = new THREE.ConeGeometry(2.4, 1.1, 4);
+const doorFrameGeometry = new THREE.BoxGeometry(0.9, 1.55, 0.08);
+const doorPanelGeometry = new THREE.BoxGeometry(0.8, 1.5, 0.05);
+const doorknobGeometry = new THREE.SphereGeometry(0.04, 8, 8);
+
+// Shared materials to minimize draw calls and conserve memory
+const facadeRoofMaterial = new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.8 });
+const doorFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 0.8 });
+const doorPanelMaterial = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.9 });
+const doorknobMaterial = new THREE.MeshStandardMaterial({
+  color: 0xffd700,
+  metalness: 0.8,
+  roughness: 0.2,
+});
+
 export interface HubFacade {
   owner: string;
   tag: string;
@@ -64,8 +81,9 @@ export class HubManager {
   private makeFacade(color: number, rotation: number): THREE.Group {
     const group = new THREE.Group();
 
+    // House Body
     const body = new THREE.Mesh(
-      new THREE.BoxGeometry(3, 2.4, 3),
+      facadeBodyGeometry,
       new THREE.MeshStandardMaterial({ color, roughness: 0.7 })
     );
     body.position.y = 1.2;
@@ -73,14 +91,32 @@ export class HubManager {
     body.receiveShadow = true;
     group.add(body);
 
-    const roof = new THREE.Mesh(
-      new THREE.ConeGeometry(2.4, 1.1, 4),
-      new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.8 })
-    );
+    // Roof
+    const roof = new THREE.Mesh(facadeRoofGeometry, facadeRoofMaterial);
     roof.position.y = 2.95;
     roof.rotation.y = Math.PI / 4;
     roof.castShadow = true;
     group.add(roof);
+
+    // Door Frame
+    const doorFrame = new THREE.Mesh(doorFrameGeometry, doorFrameMaterial);
+    doorFrame.position.set(0, 0.775, 1.51);
+    doorFrame.castShadow = true;
+    doorFrame.receiveShadow = true;
+    group.add(doorFrame);
+
+    // Door Panel
+    const doorPanel = new THREE.Mesh(doorPanelGeometry, doorPanelMaterial);
+    doorPanel.position.set(0, 0.75, 1.52);
+    doorPanel.castShadow = true;
+    doorPanel.receiveShadow = true;
+    group.add(doorPanel);
+
+    // Doorknob
+    const doorknob = new THREE.Mesh(doorknobGeometry, doorknobMaterial);
+    doorknob.position.set(0.25, 0.75, 1.55);
+    doorknob.castShadow = true;
+    group.add(doorknob);
 
     group.rotation.y = rotation;
     return group;
