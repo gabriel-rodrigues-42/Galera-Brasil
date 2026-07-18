@@ -10,7 +10,6 @@ import { RadioManager } from './radio-manager';
 import { EnemyManager } from './enemy-manager';
 import { PickupManager } from './pickup-manager';
 import { CombatManager } from './combat';
-import { Hud } from './hud';
 import * as api from './api';
 import { registerUiComponents } from './ui';
 import type { GmBadge } from './ui/components/gm-badge';
@@ -29,6 +28,7 @@ import type { GuestbookPanel } from './ui/components/guestbook-panel';
 import type { PostPanel } from './ui/components/post-panel';
 import type { AddPostPanel } from './ui/components/add-post-panel';
 import type { NpcPanel } from './ui/components/npc-panel';
+import type { BattleHud } from './ui/components/battle-hud';
 import type { GameTimerHud } from './ui/components/game-timer-hud';
 import type { GameQuestGuide } from './ui/components/game-quest-guide';
 import type { GameAssemblyOverlay } from './ui/components/game-assembly-overlay';
@@ -564,7 +564,7 @@ const network = new Network(getServerUrl());
 const avatarManager = new AvatarManager(scene, (hubId) => hubManager.originFor(hubId));
 const enemyManager = new EnemyManager(scene);
 const pickupManager = new PickupManager(scene);
-const hud = new Hud();
+const hud = document.querySelector<BattleHud>('#battle-hud')!;
 let connected = false;
 
 const MAX_CHAT_LINES = 8;
@@ -890,6 +890,7 @@ function releasePointerForUI() {
   suppressUnlockOverlay = true;
   document.exitPointerLock();
   document.body.classList.remove('locked');
+  hud.setCrosshairLocked(false);
 }
 
 function resumeAfterUI() {
@@ -915,6 +916,7 @@ window.addEventListener('keydown', (e) => {
 controls.addEventListener('lock', () => {
   overlay.classList.add('hidden');
   document.body.classList.add('locked');
+  hud.setCrosshairLocked(true);
   log(
     'info',
     `pointer lock ENGAGED — camera pos=(${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)}) ` +
@@ -929,6 +931,7 @@ controls.addEventListener('unlock', () => {
   }
   overlay.classList.remove('hidden');
   document.body.classList.remove('locked');
+  hud.setCrosshairLocked(false);
   hintEl.classList.add('hidden');
   hubPanelsController.closePost();
   npcPanelController.close();

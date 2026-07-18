@@ -12,7 +12,7 @@ import type {
 } from './network';
 import type { EnemyManager } from './enemy-manager';
 import type { AvatarManager } from './avatars';
-import type { Hud } from './hud';
+import type { BattleHud } from './ui/components/battle-hud';
 import { RadioManager } from './radio-manager';
 import { log } from './logger';
 
@@ -62,7 +62,7 @@ interface CombatDeps {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   network: Network;
-  hud: Hud;
+  hud: BattleHud;
   enemyManager: EnemyManager;
   avatarManager: AvatarManager;
   /** Gate for firing attacks: locked pointer, plaza mode, no builder/panels. */

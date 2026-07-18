@@ -30,49 +30,8 @@
       <game-assembly-overlay id="assembly" hidden></game-assembly-overlay>
       <div id="blackout-vignette"></div>
       <minigame-host id="minigame" hidden></minigame-host>
-      <div id="crosshair"></div>
       <div id="interact-hint" class="hidden"></div>
-      <!-- Battle HUD (2.0) -->
-      <div id="hud" class="hidden">
-        <div class="hud-bar health">
-          <div id="hud-health-fill" class="hud-bar-fill"></div>
-          <div id="hud-shield-fill" class="hud-bar-fill shield-fill hidden"></div>
-          <span id="hud-health-text" class="hud-bar-text">Vida 100/100</span>
-        </div>
-        <div class="hud-bar xp">
-          <div id="hud-xp-fill" class="hud-bar-fill"></div>
-          <span id="hud-xp-text" class="hud-bar-text">Nível 1 — 0/40 XP</span>
-        </div>
-        <div id="hud-coins-text">Moedas 0</div>
-      </div>
-      <div id="hotbar" class="hidden">
-        <div id="hotbar-slot-vassoura" class="hotbar-slot active">
-          <span class="hotbar-key">1</span>
-          <span class="hotbar-icon">🧹</span>
-          <span class="hotbar-label">Vassoura</span>
-        </div>
-        <div id="hotbar-slot-chinelo" class="hotbar-slot">
-          <span class="hotbar-key">2</span>
-          <span class="hotbar-icon">🩴</span>
-          <span class="hotbar-label">Chinelo</span>
-        </div>
-        <div id="hotbar-slot-suco" class="hotbar-slot consumable">
-          <span class="hotbar-key">3</span>
-          <span class="hotbar-icon">🍊</span>
-          <span id="hotbar-suco-label" class="hotbar-label">Suco x0</span>
-        </div>
-      </div>
-      <div id="boss-bar" class="hidden">
-        <div id="boss-bar-fill"></div>
-        <span id="boss-bar-text">👑 Muriçoca Rainha</span>
-      </div>
-      <div id="hud-floats"></div>
-      <div id="damage-vignette"></div>
-      <div id="death-overlay" class="hidden">
-        <h2>😵 Você desmaiou!</h2>
-        <p>Os mosquitos venceram dessa vez...</p>
-        <p>Voltando pra praça em <span id="death-countdown">3</span>s</p>
-      </div>
+      <battle-hud id="battle-hud"></battle-hud>
       <post-panel id="post-panel" hidden></post-panel>
       <guestbook-panel id="guestbook-panel" hidden></guestbook-panel>
       <npc-panel id="npc-panel" hidden></npc-panel>
