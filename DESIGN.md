@@ -270,17 +270,17 @@ Event name constants and typed `detail` interfaces live in `client/src/ui/events
 
 See [PLAN-UI.md](PLAN-UI.md) for the phase definitions. Status of each inventory row:
 
-| Legacy (index.html id)                                                                      | Target component                                                                               | Phase | Status     |
-| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----- | ---------- |
-| `#gm-panel` (4 tabs)                                                                        | `<gm-panel>` + `<gm-builder-tab>` `<gm-shortcuts-tab>` `<gm-sound-tab>` `<gm-permissions-tab>` | 1     | ✅ done    |
-| `#gm-help-badge`, `#builder-status`                                                         | `<gm-badge>`, `<builder-status>`                                                               | 1     | ✅ done    |
-| `#guestbook-panel`                                                                          | `<guestbook-panel>`                                                                            | 2     | ⬜ pending |
-| `#post-panel`, `#add-post-panel`                                                            | `<post-panel>`, `<add-post-panel>`                                                             | 2     | ⬜ pending |
-| `#npc-panel` + shop + stickers                                                              | `<npc-panel>`                                                                                  | 3     | ⬜ pending |
-| `#hud` `#hotbar` `#boss-bar` `#hud-floats` `#death-overlay` `#damage-vignette` `#crosshair` | `<battle-hud>` (replaces `hud.ts`)                                                             | 4     | ⬜ pending |
-| `#overlay` (join)                                                                           | `<join-overlay>`                                                                               | 5     | ⬜ pending |
-| `#chat-card` + `#chat-input`                                                                | `<chat-box>`                                                                                   | 6     | ⬜ pending |
-| `#interact-hint`, `#debug-panel`                                                            | `<interact-hint>`, `<debug-panel>`                                                             | 7     | ⬜ pending |
+| Legacy (index.html id)                                                                      | Target component                                                                               | Phase | Status  |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----- | ------- |
+| `#gm-panel` (4 tabs)                                                                        | `<gm-panel>` + `<gm-builder-tab>` `<gm-shortcuts-tab>` `<gm-sound-tab>` `<gm-permissions-tab>` | 1     | ✅ done |
+| `#gm-help-badge`, `#builder-status`                                                         | `<gm-badge>`, `<builder-status>`                                                               | 1     | ✅ done |
+| `#guestbook-panel`                                                                          | `<guestbook-panel>`                                                                            | 2     | ✅ done |
+| `#post-panel`, `#add-post-panel`                                                            | `<post-panel>`, `<add-post-panel>`                                                             | 2     | ✅ done |
+| `#npc-panel` + shop + stickers                                                              | `<npc-panel>`                                                                                  | 3     | ✅ done |
+| `#hud` `#hotbar` `#boss-bar` `#hud-floats` `#death-overlay` `#damage-vignette` `#crosshair` | `<battle-hud>` (replaces `hud.ts`)                                                             | 4     | ✅ done |
+| `#overlay` (join)                                                                           | `<join-overlay>`                                                                               | 5     | ✅ done |
+| `#chat-card` + `#chat-input`                                                                | `<chat-box>`                                                                                   | 6     | ✅ done |
+| `#interact-hint`, `#debug-panel`                                                            | `<interact-hint>`, `<debug-panel>`                                                             | 7     | ✅ done |
 
 ## Appendix — Gotchas Register
 
@@ -292,4 +292,4 @@ See [PLAN-UI.md](PLAN-UI.md) for the phase definitions. Status of each inventory
 6. **knip**: unimported component files and unused exports fail pre-commit. The `ui/index.ts` registry is mandatory; add `events.ts` constants only when used.
 7. **`verbatimModuleSyntax`**: `import type` for `SelfState`, `HubPost`, `NpcDef`, etc. — the most common new-component compile error.
 8. **Prettier** doesn't format inside TS template strings — keep shadow templates readably indented by hand.
-9. **One-modal-at-a-time invariant** lives in `ui-state.anyModalOpen()`; if a new panel skips it, B/Enter/C/E key routing starts colliding.
+9. **One-modal-at-a-time invariant**: no shared `ui-state.ts` module exists (planned in Phase 1, never needed) — each controller (`hub-panels-controller`, `npc-panel-controller`, `gm-controller`, `chat-controller`) tracks its own open/closed state via a local closure exposed as a getter, and every B/Enter/C/E key-routing guard in main.ts checks all of them individually (`!hubPanelsController.isPostOpen && !npcPanelController.isOpen && !gmController.isOpen && ...`). If a new panel skips being added to those guard lists, key routing starts colliding.

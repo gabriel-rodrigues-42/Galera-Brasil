@@ -31,6 +31,8 @@ import type { AddPostPanel } from './ui/components/add-post-panel';
 import type { NpcPanel } from './ui/components/npc-panel';
 import type { BattleHud } from './ui/components/battle-hud';
 import type { ChatBox } from './ui/components/chat-box';
+import type { InteractHint } from './ui/components/interact-hint';
+import type { DebugPanel } from './ui/components/debug-panel';
 import type { GameTimerHud } from './ui/components/game-timer-hud';
 import type { GameQuestGuide } from './ui/components/game-quest-guide';
 import type { GameAssemblyOverlay } from './ui/components/game-assembly-overlay';
@@ -50,7 +52,7 @@ log('info', 'main.ts starting');
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
 const overlay = document.querySelector<JoinOverlay>('#overlay')!;
-const hintEl = document.querySelector<HTMLDivElement>('#interact-hint')!;
+const hintEl = document.querySelector<InteractHint>('#interact-hint')!;
 const guestbookPanelEl = document.querySelector<GuestbookPanel>('#guestbook-panel')!;
 const postPanelEl = document.querySelector<PostPanel>('#post-panel')!;
 const addPostPanelEl = document.querySelector<AddPostPanel>('#add-post-panel')!;
@@ -60,17 +62,13 @@ const assemblyEl = document.querySelector<GameAssemblyOverlay>('#assembly')!;
 const blackoutViggnetteEl = document.querySelector<HTMLDivElement>('#blackout-vignette')!;
 const minigameEl = document.querySelector<MinigameHost>('#minigame')!;
 
-const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
-const debugBadgeEl = document.querySelector<HTMLButtonElement>('#debug-badge')!;
-const debugStatsEl = document.querySelector<HTMLPreElement>('#debug-stats')!;
-const debugLogEl = document.querySelector<HTMLPreElement>('#debug-log')!;
+const debugPanelEl = document.querySelector<DebugPanel>('#debug-panel')!;
 const chatBoxEl = document.querySelector<ChatBox>('#chat-box')!;
 
 const npcPanelEl = document.querySelector<NpcPanel>('#npc-panel')!;
 
-// Game Master UI selectors (badge/panel/builder tab are now components — see
-// ui/controllers/gm-controller.ts; the sound & permissions tabs stay legacy
-// light-DOM markup, slotted into <gm-panel>, until PLAN-UI.md Phase 1b/1c)
+// Game Master UI selectors — badge/panel/all four tabs are components, see
+// ui/controllers/gm-controller.ts.
 const gmHelpBadgeEl = document.querySelector<GmBadge>('#gm-help-badge')!;
 const gmPanelEl = document.querySelector<GmPanel>('#gm-panel')!;
 const gmBuilderTabEl = document.querySelector<GmBuilderTab>('#gm-builder-tab')!;
@@ -78,14 +76,10 @@ const gmSoundTabEl = document.querySelector<GmSoundTab>('#gm-sound-tab')!;
 const gmPermissionsTabEl = document.querySelector<GmPermissionsTab>('#gm-permissions-tab')!;
 const builderStatusEl = document.querySelector<BuilderStatus>('#builder-status')!;
 
-initDebugPanel(debugLogEl, debugStatsEl);
-
-function toggleDebugPanel() {
-  debugPanelEl.classList.toggle('collapsed');
-}
+initDebugPanel(debugPanelEl);
 
 async function copyDebugLogToClipboard() {
-  const content = debugLogEl.textContent?.trim() || '';
+  const content = debugPanelEl.getLogText();
   if (!content) return;
   try {
     await navigator.clipboard.writeText(content);
@@ -111,21 +105,14 @@ async function copyDebugLogToClipboard() {
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyD' && e.ctrlKey && e.shiftKey) {
     e.preventDefault();
-    if (debugPanelEl.classList.contains('collapsed')) {
-      debugPanelEl.classList.remove('collapsed');
-    }
+    debugPanelEl.expand();
     void copyDebugLogToClipboard();
     return;
   }
 
   if (e.code !== 'Backquote' && e.key !== '~') return;
   e.preventDefault();
-  toggleDebugPanel();
-});
-
-debugBadgeEl.addEventListener('click', (e) => {
-  e.stopPropagation();
-  toggleDebugPanel();
+  debugPanelEl.toggleCollapsed();
 });
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -906,7 +893,7 @@ controls.addEventListener('unlock', () => {
   overlay.classList.remove('hidden');
   document.body.classList.remove('locked');
   hud.setCrosshairLocked(false);
-  hintEl.classList.add('hidden');
+  hintEl.setText('');
   hubPanelsController.closePost();
   npcPanelController.close();
   chatController.closeInput();
@@ -1534,7 +1521,7 @@ function exitHub() {
 
 function updateInteraction() {
   if (chatController.isInputOpen || hubPanelsController.isAddPostOpen) {
-    hintEl.classList.add('hidden');
+    hintEl.setText('');
     return;
   }
 
@@ -1673,8 +1660,7 @@ function updateInteraction() {
     hint = 'Pressione N para adicionar um post';
   }
 
-  hintEl.textContent = hint;
-  hintEl.classList.toggle('hidden', hint === '');
+  hintEl.setText(hint);
 
   if (eJustPressed) {
     if (hubPanelsController.isPostOpen) {

@@ -6,6 +6,10 @@
   box-sizing: border-box;
 }
 
+html {
+  font-size: clamp(14px, 1.2vw, 18px);
+}
+
 html,
 body {
   margin: 0;
@@ -13,11 +17,8 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font:
-    16px/1.4 system-ui,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.4;
   background: #0b1410;
 }
 
@@ -34,141 +35,6 @@ body {
   height: 100%;
   display: block;
   outline: none;
-}
-
-/* --- (join-overlay CSS moved to component shadow DOM) --- */
-
-@keyframes overlayFloat {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(18px, -10px, 0) scale(1.08);
-  }
-}
-
-#interact-hint {
-  position: absolute;
-  left: 50%;
-  /* Above the hotbar (bottom 110px + ~70px slots) so prompts never hide
-   * behind the weapon slots. */
-  bottom: 196px;
-  transform: translateX(-50%);
-  padding: 8px 16px;
-  border-radius: 8px;
-  background: rgba(10, 20, 15, 0.65);
-  color: #f4f1e8;
-  font-size: 0.95rem;
-  white-space: nowrap;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-}
-
-#interact-hint.hidden {
-  opacity: 0;
-}
-
-/* --- (post-panel and add-post-panel CSS moved to components shadow DOM) --- */
-
-#debug-panel {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  max-width: min(540px, 72vw);
-  max-height: 62vh;
-  overflow-y: auto;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.7);
-  color: #7fffb0;
-  font:
-    12px/1.4 ui-monospace,
-    Consolas,
-    monospace;
-  pointer-events: auto;
-  z-index: 10;
-}
-
-#debug-panel.collapsed {
-  max-width: none;
-  max-height: none;
-  overflow: visible;
-  padding: 0;
-  background: transparent;
-  border-radius: 0;
-}
-
-#debug-badge {
-  border: 1px solid rgba(255, 207, 92, 0.45);
-  border-radius: 999px;
-  background: rgba(12, 16, 22, 0.92);
-  color: #ffcf5c;
-  font:
-    11px/1 ui-monospace,
-    Consolas,
-    monospace;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  padding: 7px 10px;
-  cursor: pointer;
-}
-
-#debug-panel:not(.collapsed) #debug-badge {
-  position: sticky;
-  top: 0;
-  float: right;
-}
-
-#debug-panel.collapsed .debug-title,
-#debug-panel.collapsed #debug-stats,
-#debug-panel.collapsed #debug-log {
-  display: none;
-}
-
-#debug-panel .debug-title {
-  color: #ffcf5c;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-#debug-stats {
-  margin: 0 0 6px;
-  white-space: pre-wrap;
-  color: #f4f1e8;
-}
-
-#debug-log {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #7fffb0;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-  padding-top: 4px;
-}
-
-/* Mobile Media Query for action buttons grid */
-@media (max-width: 480px) {
-  #overlay {
-    padding: 16px;
-  }
-
-  .overlay-card {
-    width: 100%;
-    padding: 22px 18px 20px;
-    border-radius: 22px;
-  }
-
-  #join-form {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  #join-form button,
-  #quick-play-btn,
-  #resume-block {
-    width: 100%;
-  }
 }
 
 body.bite-shake #app {

@@ -10,6 +10,8 @@ import { GuestbookPanel } from './components/guestbook-panel';
 import { NpcPanel } from './components/npc-panel';
 import { BattleHud } from './components/battle-hud';
 import { ChatBox } from './components/chat-box';
+import { InteractHint } from './components/interact-hint';
+import { DebugPanel } from './components/debug-panel';
 import { PostPanel } from './components/post-panel';
 import { AddPostPanel } from './components/add-post-panel';
 import { JoinOverlay } from './components/join-overlay';
@@ -38,6 +40,8 @@ export function registerUiComponents(): void {
   customElements.define('npc-panel', NpcPanel);
   customElements.define('battle-hud', BattleHud);
   customElements.define('chat-box', ChatBox);
+  customElements.define('interact-hint', InteractHint);
+  customElements.define('debug-panel', DebugPanel);
   customElements.define('post-panel', PostPanel);
   customElements.define('add-post-panel', AddPostPanel);
   customElements.define('join-overlay', JoinOverlay);

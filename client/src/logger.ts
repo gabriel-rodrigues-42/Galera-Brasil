@@ -10,12 +10,15 @@ const MAX_ENTRIES = 300;
 const MAX_VISIBLE = 16;
 const entries: LogEntry[] = [];
 
-let logEl: HTMLElement | null = null;
-let statsEl: HTMLElement | null = null;
+export interface DebugPanelSink {
+  setLog(text: string): void;
+  setStats(text: string): void;
+}
 
-export function initDebugPanel(logPanel: HTMLElement, statsPanel: HTMLElement) {
-  logEl = logPanel;
-  statsEl = statsPanel;
+let sink: DebugPanelSink | null = null;
+
+export function initDebugPanel(panel: DebugPanelSink) {
+  sink = panel;
   renderLog();
 }
 
@@ -32,16 +35,17 @@ export function log(level: LogLevel, message: string) {
 }
 
 function renderLog() {
-  if (!logEl) return;
-  logEl.textContent = entries
-    .slice(-MAX_VISIBLE)
-    .map((e) => `[${(e.time / 1000).toFixed(2)}] ${e.level.toUpperCase()}: ${e.message}`)
-    .join('\n');
-  logEl.scrollTop = logEl.scrollHeight;
+  if (!sink) return;
+  sink.setLog(
+    entries
+      .slice(-MAX_VISIBLE)
+      .map((e) => `[${(e.time / 1000).toFixed(2)}] ${e.level.toUpperCase()}: ${e.message}`)
+      .join('\n')
+  );
 }
 
 export function updateStats(lines: string[]) {
-  if (statsEl) statsEl.textContent = lines.join('\n');
+  sink?.setStats(lines.join('\n'));
 }
 
 /** Surface exceptions that would otherwise silently die inside a

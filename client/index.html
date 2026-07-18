@@ -30,25 +30,14 @@
       <game-assembly-overlay id="assembly" hidden></game-assembly-overlay>
       <div id="blackout-vignette"></div>
       <minigame-host id="minigame" hidden></minigame-host>
-      <div id="interact-hint" class="hidden"></div>
+      <interact-hint id="interact-hint"></interact-hint>
       <battle-hud id="battle-hud"></battle-hud>
       <post-panel id="post-panel" hidden></post-panel>
       <guestbook-panel id="guestbook-panel" hidden></guestbook-panel>
       <npc-panel id="npc-panel" hidden></npc-panel>
       <chat-box id="chat-box"></chat-box>
       <add-post-panel id="add-post-panel" hidden></add-post-panel>
-      <div id="debug-panel" class="collapsed">
-        <button
-          id="debug-badge"
-          type="button"
-          title="Atalho: ~ para abrir/fechar · Ctrl+Shift+D para copiar log"
-        >
-          DEBUG (~)
-        </button>
-        <div class="debug-title">DEBUG (~ para esconder)</div>
-        <pre id="debug-stats"></pre>
-        <pre id="debug-log"></pre>
-      </div>
+      <debug-panel id="debug-panel"></debug-panel>
       <!-- Game Master Badge and Panel -->
       <gm-badge id="gm-help-badge" hidden></gm-badge>
       <gm-panel id="gm-panel" hidden>
