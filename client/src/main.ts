@@ -7,6 +7,7 @@ import { log, initDebugPanel, updateStats, installGlobalErrorLogging } from './l
 import { Network } from './network';
 import { AvatarManager } from './avatars';
 import { NpcManager, type NpcDef } from './npc-manager';
+import { RadioManager } from './radio-manager';
 import { EnemyManager } from './enemy-manager';
 import { PickupManager } from './pickup-manager';
 import { CombatManager } from './combat';
@@ -423,7 +424,19 @@ let myName = '';
 let openPost: HubPost | null = null;
 let openNpc: NpcDef | null = null;
 let gmPanelOpen = false;
-type BuildType = 'tree' | 'canopy' | 'rock' | 'plank' | 'lily';
+type BuildType =
+  | 'tree'
+  | 'canopy'
+  | 'rock'
+  | 'plank'
+  | 'lily'
+  | 'npc:robot'
+  | 'npc:joker'
+  | 'npc:romance'
+  | 'npc:vendor'
+  | 'monster:mosquito'
+  | 'monster:barata'
+  | 'monster:pombo';
 let currentBuildType: BuildType = 'tree';
 let builderModeActive = false;
 const gmPlacedObjects: THREE.Object3D[] = [];
@@ -636,8 +649,9 @@ joinFormEl.addEventListener('submit', (e) => {
           disposeObject3D(target);
           const idx = gmPlacedObjects.indexOf(target);
           if (idx !== -1) gmPlacedObjects.splice(idx, 1);
-          updatePlacedObjectsList();
         }
+        npcManager.removeNpc(id);
+        updatePlacedObjectsList();
       };
 
       network.onObjectsCleared = () => {
@@ -646,7 +660,22 @@ joinFormEl.addEventListener('submit', (e) => {
           disposeObject3D(obj);
         });
         gmPlacedObjects.length = 0;
-        updatePlacedObjectsList();
+        npcManager.destroy();
+
+        setTimeout(() => {
+          api
+            .listPlacedObjects()
+            .then((objects) => {
+              objects.forEach((obj) => {
+                if (gmPlacedObjects.some((o) => o.name === obj.id)) return;
+                const pos = new THREE.Vector3(obj.x, obj.y, obj.z);
+                spawnObjectAt(obj.type as BuildType, pos, obj.id);
+              });
+              log('info', 'reloaded placed objects after global clear');
+              updatePlacedObjectsList();
+            })
+            .catch((err) => log('error', `failed to reload placed objects after clear: ${err}`));
+        }, 100);
       };
 
       // Load initial placed objects from database
@@ -902,7 +931,28 @@ function updateGhostVisual() {
     }
   }
 
-  if (currentBuildType === 'tree') {
+  if (currentBuildType.startsWith('npc:')) {
+    const capsule = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.8, 4, 8), ghostMaterial);
+    capsule.position.y = 0.64;
+    ghostGroup.add(capsule);
+  } else if (currentBuildType.startsWith('monster:')) {
+    const kind = currentBuildType.split(':')[1];
+    let yPos = 1.5;
+    let geom: THREE.BufferGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+    if (kind === 'mosquito') {
+      yPos = 1.5;
+      geom = new THREE.SphereGeometry(0.25, 8, 8);
+    } else if (kind === 'barata') {
+      yPos = 0.2;
+      geom = new THREE.BoxGeometry(0.5, 0.15, 0.8);
+    } else if (kind === 'pombo') {
+      yPos = 1.2;
+      geom = new THREE.BoxGeometry(0.4, 0.4, 0.5);
+    }
+    const mesh = new THREE.Mesh(geom, ghostMaterial);
+    mesh.position.y = yPos;
+    ghostGroup.add(mesh);
+  } else if (currentBuildType === 'tree') {
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 1.4, 8), ghostMaterial);
     trunk.position.y = 0.7;
     ghostGroup.add(trunk);
@@ -959,8 +1009,15 @@ function updatePlacedObjectsList() {
     tree: '🌳 Árvore',
     canopy: '☀️ Tenda Solar',
     rock: '🪨 Rocha',
-    plank: '🪵 Bloco',
+    plank: '🪵 Bloco de Madeira',
     lily: '🪷 Vitória Régia',
+    'npc:robot': '🤖 Robô da Net',
+    'npc:joker': '🃏 Coringa do Feirão',
+    'npc:romance': '💘 Cupido Solarpunk',
+    'npc:vendor': '🧺 Dona Jurema da Feira',
+    'monster:mosquito': '🦟 Spawn: Mosquito',
+    'monster:barata': '🪳 Spawn: Barata',
+    'monster:pombo': '🕊️ Spawn: Pombo',
   };
 
   const sortedObjs = [...gmPlacedObjects].sort((a, b) => {
@@ -1005,6 +1062,9 @@ function updatePlacedObjectsList() {
       const idx = gmPlacedObjects.indexOf(obj);
       if (idx !== -1) gmPlacedObjects.splice(idx, 1);
 
+      // Also tell npcManager to clean it up in case it was an NPC
+      npcManager.removeNpc(idToDelete);
+
       api.deletePlacedObject(idToDelete).catch((err) => log('error', `failed to delete: ${err}`));
       network.sendObjectRemoved(idToDelete);
 
@@ -1019,7 +1079,16 @@ function updatePlacedObjectsList() {
 
 function spawnObjectAt(type: BuildType, pos: THREE.Vector3, id?: string) {
   let obj: THREE.Object3D;
-  if (type === 'tree') {
+  const finalId = id || self.crypto.randomUUID();
+
+  if (type.startsWith('npc:')) {
+    const npcType = type.split(':')[1] as 'robot' | 'joker' | 'romance' | 'vendor';
+    npcManager.addNpc(finalId, npcType, pos);
+    obj = scene.getObjectByName(finalId) || new THREE.Object3D();
+  } else if (type.startsWith('monster:')) {
+    obj = new THREE.Object3D();
+    obj.position.copy(pos);
+  } else if (type === 'tree') {
     obj = makeTree(pos.x, pos.z, 1.0);
     scene.add(obj);
   } else if (type === 'canopy') {
@@ -1057,7 +1126,6 @@ function spawnObjectAt(type: BuildType, pos: THREE.Vector3, id?: string) {
     obj = mesh;
   }
 
-  const finalId = id || self.crypto.randomUUID();
   obj.name = finalId;
   obj.userData.type = type;
   gmPlacedObjects.push(obj);
@@ -1114,6 +1182,13 @@ gmSelectBuildTypeEl.addEventListener('change', () => {
     rock: '🪨 Rocha',
     plank: '🪵 Bloco de Madeira',
     lily: '🪷 Vitória Régia',
+    'npc:robot': '🤖 Robô da Net',
+    'npc:joker': '🃏 Coringa do Feirão',
+    'npc:romance': '💘 Cupido Solarpunk',
+    'npc:vendor': '🧺 Dona Jurema da Feira',
+    'monster:mosquito': '🦟 Spawn: Mosquito',
+    'monster:barata': '🪳 Spawn: Barata',
+    'monster:pombo': '🕊️ Spawn: Pombo',
   };
   builderStatusItemEl.textContent = emojiMap[currentBuildType];
 
@@ -1138,6 +1213,8 @@ window.addEventListener('mousedown', (e) => {
     camera.getWorldPosition(raycastOrigin);
     camera.getWorldDirection(raycastDir);
     raycaster.set(raycastOrigin, raycastDir);
+
+    // 1. Raycast against scenery & NPCs
     const hits = raycaster.intersectObjects(gmPlacedObjects, true);
     if (hits.length > 0 && hits[0].distance <= 25) {
       let target: THREE.Object3D | null = hits[0].object;
@@ -1151,6 +1228,9 @@ window.addEventListener('mousedown', (e) => {
         const idx = gmPlacedObjects.indexOf(target);
         if (idx !== -1) gmPlacedObjects.splice(idx, 1);
 
+        // Remove from npcManager in case it was an NPC
+        npcManager.removeNpc(idToDelete);
+
         // Delete from database and broadcast removal
         api
           .deletePlacedObject(idToDelete)
@@ -1161,6 +1241,30 @@ window.addEventListener('mousedown', (e) => {
           'info',
           `GM broke object ${idToDelete} at (${target.position.x.toFixed(2)}, ${target.position.z.toFixed(2)})`
         );
+        updatePlacedObjectsList();
+        return;
+      }
+    }
+
+    // 2. Raycast against live monsters
+    const enemyGroups = enemyManager.getGroups();
+    const monsterHits = raycaster.intersectObjects(enemyGroups, true);
+    if (monsterHits.length > 0 && monsterHits[0].distance <= 25) {
+      const enemyId = enemyManager.getEnemyByObject(monsterHits[0].object);
+      if (enemyId) {
+        // Find proxy in gmPlacedObjects
+        const target = gmPlacedObjects.find((o) => o.name === enemyId);
+        if (target) {
+          const idx = gmPlacedObjects.indexOf(target);
+          if (idx !== -1) gmPlacedObjects.splice(idx, 1);
+        }
+
+        api
+          .deletePlacedObject(enemyId)
+          .catch((err) => log('error', `failed to delete monster spawn point: ${err}`));
+        network.sendObjectRemoved(enemyId);
+
+        log('info', `GM broke persistent monster ${enemyId}`);
         updatePlacedObjectsList();
       }
     }
@@ -1175,9 +1279,33 @@ window.addEventListener('contextmenu', (e) => {
   }
 });
 
+function reloadNpcsFromDb() {
+  npcManager.destroy();
+  // Filter out NPC visual groups from gmPlacedObjects
+  for (let i = gmPlacedObjects.length - 1; i >= 0; i--) {
+    const obj = gmPlacedObjects[i];
+    if (obj.userData.type && obj.userData.type.startsWith('npc:')) {
+      gmPlacedObjects.splice(i, 1);
+    }
+  }
+
+  api
+    .listPlacedObjects()
+    .then((objects) => {
+      objects.forEach((obj) => {
+        if (obj.type.startsWith('npc:')) {
+          const pos = new THREE.Vector3(obj.x, obj.y, obj.z);
+          spawnObjectAt(obj.type as BuildType, pos, obj.id);
+        }
+      });
+      updatePlacedObjectsList();
+    })
+    .catch((err) => log('error', `failed to reload NPCs: ${err}`));
+}
+
 gmBtnNpcsEl.addEventListener('click', () => {
-  npcManager.respawn();
-  log('info', 'GM triggered NPCs respawn');
+  reloadNpcsFromDb();
+  log('info', 'GM triggered NPCs reload from DB');
 });
 
 gmBtnTreesEl.addEventListener('click', () => {
@@ -1224,7 +1352,6 @@ gmBtnClearMosquitosEl.addEventListener('click', () => {
 });
 
 gmBtnAllEl.addEventListener('click', () => {
-  npcManager.respawn();
   clearTrees();
   spawnTrees();
   clearSolarCanopies();
@@ -1238,11 +1365,29 @@ gmBtnAllEl.addEventListener('click', () => {
     disposeObject3D(obj);
   });
   gmPlacedObjects.length = 0;
+  npcManager.destroy();
 
-  // Clear database and broadcast clear
-  api.clearPlacedObjects().catch((err) => log('error', `failed to clear placed objects: ${err}`));
+  // Clear database, reload defaults for local player and broadcast clear
+  api
+    .clearPlacedObjects()
+    .then(() => {
+      setTimeout(() => {
+        api
+          .listPlacedObjects()
+          .then((objects) => {
+            objects.forEach((obj) => {
+              if (gmPlacedObjects.some((o) => o.name === obj.id)) return;
+              const pos = new THREE.Vector3(obj.x, obj.y, obj.z);
+              spawnObjectAt(obj.type as BuildType, pos, obj.id);
+            });
+            updatePlacedObjectsList();
+          })
+          .catch((err) => log('error', `failed to reload placed objects after clear: ${err}`));
+      }, 100);
+    })
+    .catch((err) => log('error', `failed to clear placed objects: ${err}`));
+
   network.sendObjectsCleared();
-
   log('info', 'GM triggered full world respawn');
 });
 
@@ -1555,9 +1700,30 @@ const STICKERS = [
     description: 'Concedido pelo Romântico para encontros perfeitos.',
     npcType: 'romance',
   },
+  {
+    id: 'sticker_vendor_1',
+    name: 'Cesta de Vime',
+    emoji: '🧺',
+    description: 'Concedido por Dona Jurema por visitar a feira livre.',
+    npcType: 'vendor',
+  },
+  {
+    id: 'sticker_vendor_2',
+    name: 'Chinelo de Ouro',
+    emoji: '🩴',
+    description: 'Concedido por Dona Jurema por ser um cliente fiel.',
+    npcType: 'vendor',
+  },
+  {
+    id: 'sticker_vendor_3',
+    name: 'Suco Natural',
+    emoji: '🍊',
+    description: 'Concedido por Dona Jurema por valorizar a saúde.',
+    npcType: 'vendor',
+  },
 ];
 
-function renderStickerAlbum(npcType: 'robot' | 'joker' | 'romance') {
+function renderStickerAlbum(npcType: 'robot' | 'joker' | 'romance' | 'vendor') {
   const npcStickers = STICKERS.filter((s) => s.npcType === npcType);
   npcStickersListEl.innerHTML = npcStickers
     .map((sticker) => {
@@ -1605,13 +1771,20 @@ function openNpcPanel(npc: NpcDef) {
     npcBtnStickerEl.classList.remove('hidden');
     npcStickerSectionEl.classList.remove('hidden');
     renderStickerAlbum(npc.id);
-  } else {
+  } else if (npc.id === 'vendor') {
+    npcBtnActionEl.textContent = 'Falar com Feirante';
     npcPanelTextEl.textContent =
       'Bem-vindo à feira! Tenho reforço para chinelo, repelente e suco para voltar à luta.';
+    npcBtnActionEl.classList.remove('hidden');
+    npcBtnStickerEl.classList.remove('hidden');
+    npcStickerSectionEl.classList.remove('hidden');
+    npcShopEl.classList.remove('hidden');
+    renderStickerAlbum(npc.id);
+  } else {
+    npcPanelTextEl.textContent = 'Olá!';
     npcBtnActionEl.classList.add('hidden');
     npcBtnStickerEl.classList.add('hidden');
     npcStickerSectionEl.classList.add('hidden');
-    npcShopEl.classList.remove('hidden');
   }
 
   npcPanelEl.classList.remove('hidden');
@@ -1632,7 +1805,7 @@ npcPanelCloseEl.addEventListener('click', () => {
 });
 
 npcBtnActionEl.addEventListener('click', () => {
-  if (!openNpc || openNpc.id === 'vendor') return;
+  if (!openNpc) return;
   npcPanelRewardEl.classList.add('hidden');
 
   api
@@ -1648,7 +1821,7 @@ npcBtnActionEl.addEventListener('click', () => {
 });
 
 npcBtnStickerEl.addEventListener('click', () => {
-  if (!openNpc || !myName || openNpc.id === 'vendor') return;
+  if (!openNpc || !myName) return;
   const npcId = openNpc.id;
 
   api
@@ -1911,6 +2084,176 @@ function animate(timestamp: number) {
 
   renderer.render(scene, camera);
 }
+
+// --- Game Master Panel UI Wiring (Tabs, Grid Cards, Audio & Mixer) -----------
+
+// Tab navigation
+const tabButtons = document.querySelectorAll<HTMLButtonElement>('.gm-tab-btn');
+const tabPanes = document.querySelectorAll<HTMLDivElement>('.gm-tab-pane');
+
+tabButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const tabName = btn.getAttribute('data-tab');
+    tabButtons.forEach((b) => b.classList.remove('active'));
+    tabPanes.forEach((p) => p.classList.remove('active'));
+
+    btn.classList.add('active');
+    const targetPane = document.getElementById(`gm-tab-content-${tabName}`);
+    if (targetPane) targetPane.classList.add('active');
+
+    // Resume context if opening Sound tab
+    if (tabName === 'sound') {
+      RadioManager.getInstance().resume();
+    }
+  });
+});
+
+// Builder Grid Cards
+const gridCards = document.querySelectorAll<HTMLDivElement>('.gm-card');
+gridCards.forEach((card) => {
+  card.addEventListener('click', () => {
+    const buildType = card.getAttribute('data-build') as BuildType;
+    if (!buildType) return;
+
+    gridCards.forEach((c) => c.classList.remove('active'));
+    card.classList.add('active');
+
+    // Programmatically update the hidden compatibility select & dispatch change
+    gmSelectBuildTypeEl.value = buildType;
+    gmSelectBuildTypeEl.dispatchEvent(new Event('change'));
+  });
+});
+
+// Volume Mixer Wiring
+const volumeMasterEl = document.getElementById('volume-master') as HTMLInputElement;
+const volumeSfxEl = document.getElementById('volume-sfx') as HTMLInputElement;
+const volumeRadioEl = document.getElementById('volume-radio') as HTMLInputElement;
+
+const volumeMasterValEl = document.getElementById('volume-master-val')!;
+const volumeSfxValEl = document.getElementById('volume-sfx-val')!;
+const volumeRadioValEl = document.getElementById('volume-radio-val')!;
+
+const radio = RadioManager.getInstance();
+
+volumeMasterEl.addEventListener('input', () => {
+  const val = parseInt(volumeMasterEl.value) / 100;
+  radio.setMasterVolume(val);
+  volumeMasterValEl.textContent = `${volumeMasterEl.value}%`;
+});
+
+volumeSfxEl.addEventListener('input', () => {
+  const val = parseInt(volumeSfxEl.value) / 100;
+  radio.setSfxVolume(val);
+  volumeSfxValEl.textContent = `${volumeSfxEl.value}%`;
+});
+
+volumeRadioEl.addEventListener('input', () => {
+  const val = parseInt(volumeRadioEl.value) / 100;
+  radio.setRadioVolume(val);
+  volumeRadioValEl.textContent = `${volumeRadioEl.value}%`;
+});
+
+// Radio Players Wiring
+const radioBtnPrev = document.getElementById('radio-btn-prev') as HTMLButtonElement;
+const radioBtnPlay = document.getElementById('radio-btn-play') as HTMLButtonElement;
+const radioBtnNext = document.getElementById('radio-btn-next') as HTMLButtonElement;
+
+const radioTrackName = document.getElementById('radio-track-name')!;
+const radioTrackGenre = document.getElementById('radio-track-genre')!;
+
+const radioVisualizerCanvas = document.getElementById('radio-visualizer') as HTMLCanvasElement;
+const radioVisualizerCtx = radioVisualizerCanvas.getContext('2d')!;
+
+function updateRadioUI() {
+  if (radio.getIsPlaying()) {
+    radioBtnPlay.textContent = '⏸️ Pausar';
+    radioBtnPlay.classList.add('play-btn');
+    const track = radio.getCurrentTrack();
+    radioTrackName.textContent = track.name;
+    radioTrackGenre.textContent = `${track.genre} · ${track.tempo} BPM`;
+  } else {
+    radioBtnPlay.textContent = '▶️ Ligar';
+    radioBtnPlay.classList.remove('play-btn');
+    radioTrackName.textContent = 'Rádio Desativada';
+    radioTrackGenre.textContent = 'Ligue para começar a relaxar';
+  }
+}
+
+radioBtnPlay.addEventListener('click', () => {
+  radio.toggleRadio();
+  updateRadioUI();
+});
+
+radioBtnNext.addEventListener('click', () => {
+  radio.nextTrack();
+  updateRadioUI();
+});
+
+radioBtnPrev.addEventListener('click', () => {
+  radio.prevTrack();
+  updateRadioUI();
+});
+
+// Audio Visualizer Draw Loop
+function drawVisualizer() {
+  requestAnimationFrame(drawVisualizer);
+
+  // Clear background
+  radioVisualizerCtx.fillStyle = '#060907';
+  radioVisualizerCtx.fillRect(0, 0, radioVisualizerCanvas.width, radioVisualizerCanvas.height);
+
+  if (!radio.getIsPlaying() || !radio.analyser) {
+    // Draw idle wave
+    radioVisualizerCtx.strokeStyle = 'rgba(129, 178, 154, 0.25)';
+    radioVisualizerCtx.lineWidth = 2;
+    radioVisualizerCtx.beginPath();
+    radioVisualizerCtx.moveTo(0, radioVisualizerCanvas.height / 2);
+    for (let i = 0; i < radioVisualizerCanvas.width; i++) {
+      const y =
+        radioVisualizerCanvas.height / 2 + Math.sin(i * 0.05 + performance.now() * 0.003) * 2;
+      radioVisualizerCtx.lineTo(i, y);
+    }
+    radioVisualizerCtx.stroke();
+    return;
+  }
+
+  const analyser = radio.analyser;
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  analyser.getByteFrequencyData(dataArray);
+
+  const barWidth = (radioVisualizerCanvas.width / bufferLength) * 1.6;
+  let barHeight;
+  let x = 0;
+
+  for (let i = 0; i < bufferLength; i++) {
+    barHeight = dataArray[i] * 0.22; // scale height
+
+    // Beautiful gradient
+    const grad = radioVisualizerCtx.createLinearGradient(0, radioVisualizerCanvas.height, 0, 0);
+    grad.addColorStop(0, '#4a8a4f');
+    grad.addColorStop(0.5, '#81b29a');
+    grad.addColorStop(1, '#ffcf5c');
+
+    radioVisualizerCtx.fillStyle = grad;
+    // Symmetrical visualizer centering
+    radioVisualizerCtx.fillRect(
+      radioVisualizerCanvas.width / 2 + x,
+      radioVisualizerCanvas.height - barHeight,
+      barWidth - 2,
+      barHeight
+    );
+    radioVisualizerCtx.fillRect(
+      radioVisualizerCanvas.width / 2 - x - barWidth,
+      radioVisualizerCanvas.height - barHeight,
+      barWidth - 2,
+      barHeight
+    );
+
+    x += barWidth;
+  }
+}
+drawVisualizer();
 
 log(
   'info',

@@ -51,7 +51,7 @@ export function addPost(owner: string, post: NewPostInput): Promise<HubPost> {
 // --- NPC & Sticker API calls ---------------------------------------------------
 
 export interface NpcDialogueResponse {
-  npc_type: 'robot' | 'joker' | 'romance';
+  npc_type: 'robot' | 'joker' | 'romance' | 'vendor';
   category: string;
   content: string;
 }
@@ -61,7 +61,7 @@ interface StickerDef {
   name: string;
   emoji: string;
   description: string;
-  npcType: 'robot' | 'joker' | 'romance';
+  npcType: 'robot' | 'joker' | 'romance' | 'vendor';
 }
 
 export interface StickerClaimResponse {

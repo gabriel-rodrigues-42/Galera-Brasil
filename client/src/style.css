@@ -1316,12 +1316,13 @@ body.locked #crosshair {
   height: 16px;
 }
 
-.hud-bar.shield {
-  height: 16px;
+.hud-bar.health {
+  transition: all 0.25s ease;
 }
 
-.hud-bar.shield.hidden {
-  display: none;
+.hud-bar.health.has-shield {
+  border-color: rgba(116, 214, 255, 0.8);
+  box-shadow: 0 0 8px rgba(116, 214, 255, 0.4);
 }
 
 .hud-bar-fill {
@@ -1331,7 +1332,7 @@ body.locked #crosshair {
   transition: width 0.25s ease;
 }
 
-.hud-bar.health .hud-bar-fill {
+#hud-health-fill {
   background: linear-gradient(180deg, #e0524d, #a83a36);
 }
 
@@ -1339,8 +1340,16 @@ body.locked #crosshair {
   background: linear-gradient(180deg, #ffcf5c, #d9a83a);
 }
 
-.hud-bar.shield .hud-bar-fill {
-  background: linear-gradient(180deg, #74d6ff, #2e94d1);
+#hud-shield-fill {
+  background: linear-gradient(180deg, #3db2ff, #1d82d1);
+  border-left: 2px solid rgba(255, 255, 255, 0.7);
+  transition:
+    width 0.25s ease,
+    left 0.25s ease;
+}
+
+#hud-shield-fill.hidden {
+  display: none;
 }
 
 .hud-bar-text {
@@ -1604,4 +1613,396 @@ body.bite-shake #app {
   100% {
     transform: translate(0, 0);
   }
+}
+
+/* --- Game Master Tabbed Panel Styling --- */
+
+.gm-tabs {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  border-bottom: 1px solid rgba(244, 241, 232, 0.1);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.gm-tab-btn {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #f4f1e8;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: all 0.15s ease;
+}
+
+.gm-tab-btn:hover {
+  opacity: 1;
+  background: rgba(244, 241, 232, 0.04);
+}
+
+.gm-tab-btn.active {
+  opacity: 1;
+  background: rgba(244, 241, 232, 0.08);
+  border-color: rgba(244, 241, 232, 0.15);
+  color: #ffcf5c;
+}
+
+.gm-tab-pane {
+  display: none;
+  width: 100%;
+}
+
+.gm-tab-pane.active {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Scenery, NPC & Monster Visual Catalog Grid */
+
+.gm-grid-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.gm-grid-section h4 {
+  margin: 6px 0 4px 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+  color: #ffcf5c;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gm-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.gm-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(244, 241, 232, 0.08);
+  background: rgba(244, 241, 232, 0.03);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.gm-card:hover {
+  background: rgba(244, 241, 232, 0.08);
+  border-color: rgba(244, 241, 232, 0.2);
+  transform: translateY(-1px);
+}
+
+.gm-card.active {
+  background: rgba(129, 178, 154, 0.15);
+  border-color: #81b29a;
+  box-shadow: 0 0 6px rgba(129, 178, 154, 0.3);
+}
+
+.gm-card .card-emoji {
+  font-size: 1.3rem;
+}
+
+.gm-card .card-name {
+  font-size: 0.72rem;
+  margin-top: 4px;
+  opacity: 0.9;
+  text-align: center;
+}
+
+/* Sections and buttons row */
+
+.gm-section-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  border-top: 1px solid rgba(244, 241, 232, 0.08);
+  padding-top: 8px;
+  text-align: left;
+}
+
+.gm-section-row h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #ffcf5c;
+}
+
+.gm-buttons-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
+}
+
+.gm-action-btn-mini {
+  padding: 6px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(244, 241, 232, 0.1);
+  background: rgba(244, 241, 232, 0.05);
+  color: #f4f1e8;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.gm-action-btn-mini:hover {
+  background: rgba(244, 241, 232, 0.12);
+  border-color: rgba(244, 241, 232, 0.22);
+}
+
+.gm-action-btn-mini.primary {
+  background: rgba(224, 122, 95, 0.25);
+  border-color: rgba(224, 122, 95, 0.4);
+  color: #ffcf5c;
+}
+
+.gm-action-btn-mini.primary:hover {
+  background: rgba(224, 122, 95, 0.45);
+}
+
+.gm-action-btn-mini.danger {
+  background: rgba(224, 82, 77, 0.2);
+  border-color: rgba(224, 82, 77, 0.4);
+  color: #ff8580;
+}
+
+.gm-action-btn-mini.danger:hover {
+  background: rgba(224, 82, 77, 0.35);
+}
+
+/* Shortcuts Layout */
+
+.gm-shortcuts-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.shortcut-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(244, 241, 232, 0.015);
+  border: 1px solid rgba(244, 241, 232, 0.04);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.shortcut-group h4 {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #ffcf5c;
+  border-bottom: 1px solid rgba(244, 241, 232, 0.06);
+  padding-bottom: 3px;
+}
+
+.shortcut-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+}
+
+.shortcut-table td {
+  padding: 3px 0;
+  vertical-align: middle;
+}
+
+.shortcut-table td:first-child {
+  width: 150px;
+  font-weight: 600;
+  padding-right: 6px;
+}
+
+kbd {
+  display: inline-block;
+  padding: 1px 4px;
+  font-family: monospace;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: #f4f1e8;
+  background-color: rgba(244, 241, 232, 0.12);
+  border: 1px solid rgba(244, 241, 232, 0.28);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+  margin: 1px;
+}
+
+/* Sound mixer & generative player styling */
+
+.gm-sound-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.sound-sliders-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(244, 241, 232, 0.015);
+  border: 1px solid rgba(244, 241, 232, 0.04);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.sound-sliders-group h3,
+.solarpunk-radio-group h3 {
+  margin: 0 0 4px 0;
+  font-size: 0.9rem;
+  color: #ffcf5c;
+}
+
+.volume-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  width: 100%;
+}
+
+.slider-icon {
+  font-size: 1.1rem;
+}
+
+.volume-slider-row label {
+  width: 96px;
+}
+
+.volume-slider-row input[type='range'] {
+  flex: 1;
+  height: 4px;
+  background: rgba(244, 241, 232, 0.15);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  accent-color: #81b29a;
+}
+
+.slider-val {
+  width: 38px;
+  text-align: right;
+  font-weight: bold;
+  font-family: monospace;
+  opacity: 0.85;
+}
+
+.solarpunk-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-player-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(12, 15, 13, 0.65);
+  border: 1px solid rgba(244, 241, 232, 0.06);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+  width: 100%;
+}
+
+.radio-visualizer-container {
+  width: 100%;
+  background: #060907;
+  border-radius: 5px;
+  border: 1px solid rgba(244, 241, 232, 0.04);
+  display: flex;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+#radio-visualizer {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  height: 60px;
+}
+
+.radio-track-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+  gap: 2px;
+}
+
+.track-name {
+  font-weight: bold;
+  font-size: 0.88rem;
+  color: #ffcf5c;
+  letter-spacing: 0.02em;
+}
+
+.track-genre {
+  font-size: 0.72rem;
+  opacity: 0.65;
+}
+
+.radio-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.radio-ctrl-btn {
+  background: rgba(244, 241, 232, 0.06);
+  border: 1px solid rgba(244, 241, 232, 0.15);
+  border-radius: 5px;
+  padding: 4px 10px;
+  color: #f4f1e8;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: all 0.12s ease;
+}
+
+.radio-ctrl-btn:hover {
+  background: rgba(244, 241, 232, 0.12);
+  border-color: rgba(244, 241, 232, 0.3);
+}
+
+.radio-ctrl-btn.play-btn {
+  font-size: 0.8rem;
+  font-weight: bold;
+  min-width: 94px;
+  background: rgba(129, 178, 154, 0.15);
+  border-color: #81b29a;
+  color: #81b29a;
+}
+
+.radio-ctrl-btn.play-btn:hover {
+  background: rgba(129, 178, 154, 0.35);
+  color: #92c4ac;
 }

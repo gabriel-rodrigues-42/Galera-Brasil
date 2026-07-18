@@ -12,9 +12,8 @@ const LEVEL_CAP = 10;
  * death overlay, and floating "+XP" text. Pure presentation — all values come
  * from the server via the schema self-watcher. */
 export class Hud {
-  private shieldEl = document.querySelector<HTMLDivElement>('#hud-shield')!;
+  private healthBarEl = document.querySelector<HTMLDivElement>('.hud-bar.health')!;
   private shieldFillEl = document.querySelector<HTMLDivElement>('#hud-shield-fill')!;
-  private shieldTextEl = document.querySelector<HTMLSpanElement>('#hud-shield-text')!;
   private healthFillEl = document.querySelector<HTMLDivElement>('#hud-health-fill')!;
   private healthTextEl = document.querySelector<HTMLSpanElement>('#hud-health-text')!;
   private xpFillEl = document.querySelector<HTMLDivElement>('#hud-xp-fill')!;
@@ -49,18 +48,32 @@ export class Hud {
   }
 
   updateSelf(state: SelfState) {
-    if (state.maxShield > 0) {
-      const shieldFraction = state.shield / state.maxShield;
-      this.shieldEl.classList.remove('hidden');
-      this.shieldFillEl.style.width = `${Math.max(0, Math.min(1, shieldFraction)) * 100}%`;
-      this.shieldTextEl.textContent = `Shield ${state.shield}/${state.maxShield}`;
-    } else {
-      this.shieldEl.classList.add('hidden');
-    }
+    const totalMax = state.maxHp + state.maxShield;
 
-    const hpFraction = state.maxHp > 0 ? state.hp / state.maxHp : 0;
-    this.healthFillEl.style.width = `${Math.max(0, Math.min(1, hpFraction)) * 100}%`;
-    this.healthTextEl.textContent = `Vida ${state.hp}/${state.maxHp}`;
+    if (state.maxShield > 0) {
+      this.healthBarEl.classList.add('has-shield');
+
+      const hpPercent = totalMax > 0 ? (state.hp / totalMax) * 100 : 0;
+      const shieldPercent = totalMax > 0 ? (state.shield / totalMax) * 100 : 0;
+
+      this.healthFillEl.style.width = `${hpPercent}%`;
+
+      this.shieldFillEl.classList.remove('hidden');
+      this.shieldFillEl.style.left = `${hpPercent}%`;
+      this.shieldFillEl.style.width = `${shieldPercent}%`;
+
+      this.healthTextEl.textContent = `Vida ${state.hp}/${state.maxHp} + Shield ${state.shield}/${state.maxShield}`;
+    } else {
+      this.healthBarEl.classList.remove('has-shield');
+
+      const hpFraction = state.maxHp > 0 ? state.hp / state.maxHp : 0;
+      this.healthFillEl.style.width = `${Math.max(0, Math.min(1, hpFraction)) * 100}%`;
+
+      this.shieldFillEl.classList.add('hidden');
+      this.shieldFillEl.style.width = '0%';
+
+      this.healthTextEl.textContent = `Vida ${state.hp}/${state.maxHp}`;
+    }
 
     if (state.level >= LEVEL_CAP) {
       this.xpFillEl.style.width = '100%';

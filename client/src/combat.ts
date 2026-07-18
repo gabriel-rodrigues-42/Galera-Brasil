@@ -13,6 +13,7 @@ import type {
 import type { EnemyManager } from './enemy-manager';
 import type { AvatarManager } from './avatars';
 import type { Hud } from './hud';
+import { RadioManager } from './radio-manager';
 import { log } from './logger';
 
 // Client-side cooldowns mirror the server's (server/src/rooms/combat.ts) so a
@@ -243,13 +244,13 @@ export class CombatManager {
   }
 
   private ensureAudio() {
-    if (!this.audioCtx) {
-      this.audioCtx = new AudioContext();
-      this.audioOut = this.audioCtx.createGain();
-      this.audioOut.gain.value = 0.28;
-      this.audioOut.connect(this.audioCtx.destination);
-    }
-    if (this.audioCtx.state === 'suspended') {
+    const radio = RadioManager.getInstance();
+    radio.init();
+    radio.resume();
+    this.audioCtx = radio.audioCtx;
+    this.audioOut = radio.sfxGain;
+
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
       void this.audioCtx.resume();
     }
     if (!this.buzzOsc && this.audioCtx && this.audioOut) {

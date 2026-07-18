@@ -5,6 +5,7 @@ import {
   getOrCreatePlayerUpgrades,
   savePlayerStats,
   savePlayerUpgrades,
+  listPlacedObjects,
 } from '../db';
 import type { PlazaRoom, PlayerState } from './PlazaRoom';
 import { BossController, BOSS_ID, BOSS_KIND } from './boss';
@@ -201,9 +202,77 @@ export class CombatSystem {
   private spawnAccumulatorMs = 0;
   private elapsed = 0;
   readonly boss: BossController;
+  private persistentSpawns = new Map<string, { kind: string; x: number; z: number }>();
+  private pendingRespawns: { id: string; kind: string; x: number; z: number; respawnAt: number }[] =
+    [];
 
   constructor(readonly room: PlazaRoom) {
     this.boss = new BossController(this);
+
+    // Load persistent monster spawns from DB
+    try {
+      const allPlaced = listPlacedObjects();
+      allPlaced.forEach((obj) => {
+        if (obj.type.startsWith('monster:')) {
+          const kind = obj.type.split(':')[1];
+          this.persistentSpawns.set(obj.id, { kind, x: obj.x, z: obj.z });
+        }
+      });
+      console.log(
+        `[CombatSystem] Loaded ${this.persistentSpawns.size} persistent monster spawns from DB.`
+      );
+
+      // Spawn them
+      for (const [id, spawn] of this.persistentSpawns.entries()) {
+        this.spawnPersistentEnemy(id, spawn.kind, spawn.x, spawn.z);
+      }
+    } catch (e) {
+      console.error('[CombatSystem] Failed to load persistent spawns:', e);
+    }
+  }
+
+  spawnPersistentEnemy(id: string, kind: string, x: number, z: number) {
+    const enemyKind = kind as EnemyKind;
+    const def = ENEMY_DEFS[enemyKind];
+    if (!def) return;
+
+    const enemy = new EnemyState();
+    enemy.kind = enemyKind;
+    enemy.x = x;
+    enemy.z = z;
+    enemy.y = def.hoverY;
+    enemy.hp = def.hp;
+    enemy.maxHp = def.hp;
+
+    this.room.state.enemies.set(id, enemy);
+    this.brains.set(id, {
+      anchorX: x,
+      anchorY: def.hoverY,
+      anchorZ: z,
+      state: 'wander',
+      aggroUntil: 0,
+      lastBiteAt: 0,
+      wanderSeed: Math.random() * 100,
+    });
+    console.log(`[Combat] spawned persistent enemy ${id} of kind ${kind} at (${x}, ${z})`);
+  }
+
+  addPersistentSpawn(id: string, type: string, x: number, z: number) {
+    if (!type.startsWith('monster:')) return;
+    const kind = type.split(':')[1];
+    this.persistentSpawns.set(id, { kind, x, z });
+    this.pendingRespawns = this.pendingRespawns.filter((p) => p.id !== id);
+    this.spawnPersistentEnemy(id, kind, x, z);
+  }
+
+  removePersistentSpawn(id: string) {
+    this.persistentSpawns.delete(id);
+    this.pendingRespawns = this.pendingRespawns.filter((p) => p.id !== id);
+    if (this.room.state.enemies.has(id)) {
+      this.room.state.enemies.delete(id);
+      this.brains.delete(id);
+      console.log(`[CombatSystem] Persistent enemy ${id} despawned (spawn point deleted)`);
+    }
   }
 
   // --- Player lifecycle -----------------------------------------------------
@@ -247,6 +316,18 @@ export class CombatSystem {
     this.updateProjectiles(dt);
     this.updatePickups();
     this.boss.update(dt, dtMs);
+
+    // Process pending respawns for persistent monsters
+    const now = Date.now();
+    for (let i = this.pendingRespawns.length - 1; i >= 0; i--) {
+      const respawn = this.pendingRespawns[i];
+      if (now >= respawn.respawnAt) {
+        if (this.persistentSpawns.has(respawn.id)) {
+          this.spawnPersistentEnemy(respawn.id, respawn.kind, respawn.x, respawn.z);
+        }
+        this.pendingRespawns.splice(i, 1);
+      }
+    }
   }
 
   private updateSpawner(dtMs: number) {
@@ -311,6 +392,18 @@ export class CombatSystem {
     this.brains.clear();
     this.boss.notifyCleared();
     console.log('[Combat] all enemies cleared');
+  }
+
+  clearPersistentSpawns() {
+    for (const id of this.persistentSpawns.keys()) {
+      if (this.room.state.enemies.has(id)) {
+        this.room.state.enemies.delete(id);
+        this.brains.delete(id);
+      }
+    }
+    this.persistentSpawns.clear();
+    this.pendingRespawns = [];
+    console.log('[CombatSystem] All persistent monster spawn points cleared');
   }
 
   // --- Boss support (called by BossController) ------------------------------
@@ -383,7 +476,28 @@ export class CombatSystem {
       return;
     }
 
-    if (dist2d(player.x, player.z, VENDOR_POS.x, VENDOR_POS.z) > VENDOR_INTERACT_RADIUS) {
+    // Find all placed vendors to support custom GM placements
+    const vendorPositions: { x: number; z: number }[] = [];
+    try {
+      const placed = listPlacedObjects();
+      placed.forEach((obj) => {
+        if (obj.type === 'npc:vendor') {
+          vendorPositions.push({ x: obj.x, z: obj.z });
+        }
+      });
+    } catch (e) {
+      console.error('[CombatSystem] Failed to load placed vendors for purchase check:', e);
+    }
+
+    if (vendorPositions.length === 0) {
+      vendorPositions.push({ x: VENDOR_POS.x, z: VENDOR_POS.z });
+    }
+
+    const isNearAnyVendor = vendorPositions.some((pos) => {
+      return dist2d(player.x, player.z, pos.x, pos.z) <= VENDOR_INTERACT_RADIUS;
+    });
+
+    if (!isNearAnyVendor) {
       client.send('shop_purchase_result', {
         success: false,
         item,
@@ -430,6 +544,15 @@ export class CombatSystem {
     }
 
     if (item === 'repelente') {
+      if (player.shield > 0) {
+        client.send('shop_purchase_result', {
+          success: false,
+          item,
+          reason: 'already_active',
+          message: 'Você já possui um repelente ativo!',
+        });
+        return;
+      }
       player.coins -= price;
       player.maxShield = Math.max(player.maxShield, REPELENTE_SHIELD);
       player.shield = Math.min(player.maxShield, player.shield + REPELENTE_SHIELD);
@@ -812,6 +935,20 @@ export class CombatSystem {
 
     this.room.state.enemies.delete(enemyId);
     this.brains.delete(enemyId);
+
+    // If it was a persistent spawn, schedule respawn
+    if (this.persistentSpawns.has(enemyId)) {
+      const spawn = this.persistentSpawns.get(enemyId)!;
+      this.pendingRespawns.push({
+        id: enemyId,
+        kind: spawn.kind,
+        x: spawn.x,
+        z: spawn.z,
+        respawnAt: Date.now() + 10000, // 10 seconds cooldown
+      });
+      console.log(`[Combat] Scheduled respawn for persistent enemy ${enemyId} in 10s`);
+    }
+
     this.spawnCoinPickup(enemy.x, enemy.z);
     const kind = toEnemyKind(enemy.kind) ?? 'mosquito';
     const xp = ENEMY_DEFS[kind].xp;

@@ -142,6 +142,34 @@ if (countRow.c === 0) {
   romanceContent.forEach((item) => {
     insertContent.run(randomUUID(), 'romance', item.cat, item.txt);
   });
+
+  // Vendor tips
+  const vendorTips = [
+    'Quer repelente? Protege contra as picadas de mosquito e mantém o seu escudo no máximo!',
+    'O suco de laranja da minha barraca é o melhor da praça. Cura você na hora pressionando a tecla 3!',
+    'Olha a verdura fresquinha freguês! Se os mosquitos atacarem, use a vassoura neles!',
+    'Menino, toma cuidado com a Muriçoca Rainha! Ela é enorme e só aparece se atiçarem muito os mosquitos.',
+    'Sabia que você pode jogar chinelos de longe? Se equipar o Chinelo Reforçado, o estrago é ainda maior!',
+    'Trabalhar na feira é duro, mas ver a praça cheia e livre de mosquitos me enche de orgulho!',
+  ];
+  vendorTips.forEach((tip) => {
+    insertContent.run(randomUUID(), 'vendor', 'tip', tip);
+  });
+}
+
+// Pre-populate placed_objects with default NPCs if database is completely empty
+const placedObjectsCount = db.prepare('SELECT COUNT(*) as c FROM placed_objects').get() as {
+  c: number;
+};
+if (placedObjectsCount.c === 0) {
+  const insertObj = db.prepare(
+    'INSERT INTO placed_objects (id, type, x, y, z, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  const now = Date.now();
+  insertObj.run('npc_robot', 'npc:robot', -4, 0, 2, now);
+  insertObj.run('npc_joker', 'npc:joker', 4, 0, -1.5, now);
+  insertObj.run('npc_romance', 'npc:romance', 0, 0, 4.5, now);
+  insertObj.run('npc_vendor', 'npc:vendor', 6, 0, -1.5, now);
 }
 
 export type StoredPost =
@@ -270,7 +298,7 @@ interface StickerDef {
   name: string;
   emoji: string;
   description: string;
-  npcType: 'robot' | 'joker' | 'romance';
+  npcType: 'robot' | 'joker' | 'romance' | 'vendor';
 }
 
 const STICKERS: StickerDef[] = [
@@ -337,10 +365,31 @@ const STICKERS: StickerDef[] = [
     description: 'Concedido pelo Romântico para encontros perfeitos.',
     npcType: 'romance',
   },
+  {
+    id: 'sticker_vendor_1',
+    name: 'Cesta de Vime',
+    emoji: '🧺',
+    description: 'Concedido por Dona Jurema por visitar a feira livre.',
+    npcType: 'vendor',
+  },
+  {
+    id: 'sticker_vendor_2',
+    name: 'Chinelo de Ouro',
+    emoji: '🩴',
+    description: 'Concedido por Dona Jurema por ser um cliente fiel.',
+    npcType: 'vendor',
+  },
+  {
+    id: 'sticker_vendor_3',
+    name: 'Suco Natural',
+    emoji: '🍊',
+    description: 'Concedido por Dona Jurema por valorizar a saúde.',
+    npcType: 'vendor',
+  },
 ];
 
 export interface NpcDialogue {
-  npc_type: 'robot' | 'joker' | 'romance';
+  npc_type: 'robot' | 'joker' | 'romance' | 'vendor';
   category: 'tip' | 'joke' | 'date_idea' | 'hot_line';
   content: string;
 }
@@ -372,7 +421,7 @@ export interface ClaimResult {
 
 export function claimNpcSticker(
   playerName: string,
-  npcType: 'robot' | 'joker' | 'romance'
+  npcType: 'robot' | 'joker' | 'romance' | 'vendor'
 ): ClaimResult {
   // Validate NPC type
   const npcStickers = STICKERS.filter((s) => s.npcType === npcType);
@@ -518,5 +567,14 @@ export function deletePlacedObject(id: string): boolean {
 
 export function clearPlacedObjects(): boolean {
   db.prepare('DELETE FROM placed_objects').run();
+  // Re-insert default NPCs
+  const insertObj = db.prepare(
+    'INSERT INTO placed_objects (id, type, x, y, z, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  const now = Date.now();
+  insertObj.run('npc_robot', 'npc:robot', -4, 0, 2, now);
+  insertObj.run('npc_joker', 'npc:joker', 4, 0, -1.5, now);
+  insertObj.run('npc_romance', 'npc:romance', 0, 0, 4.5, now);
+  insertObj.run('npc_vendor', 'npc:vendor', 6, 0, -1.5, now);
   return true;
 }

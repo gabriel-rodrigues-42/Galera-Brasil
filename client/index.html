@@ -44,12 +44,9 @@
       <div id="interact-hint" class="hidden"></div>
       <!-- Battle HUD (2.0) -->
       <div id="hud" class="hidden">
-        <div id="hud-shield" class="hud-bar shield hidden">
-          <div id="hud-shield-fill" class="hud-bar-fill"></div>
-          <span id="hud-shield-text" class="hud-bar-text">Shield 0/0</span>
-        </div>
         <div class="hud-bar health">
           <div id="hud-health-fill" class="hud-bar-fill"></div>
+          <div id="hud-shield-fill" class="hud-bar-fill shield-fill hidden"></div>
           <span id="hud-health-text" class="hud-bar-text">Vida 100/100</span>
         </div>
         <div class="hud-bar xp">
@@ -186,72 +183,303 @@
       <div id="gm-panel" class="hidden">
         <div id="gm-panel-content">
           <h2>Painel do Game Master</h2>
-          <p class="subtitle">
-            Use este painel para respawnar os elementos do cenário em tempo real.
-          </p>
-          <div class="gm-section">
-            <button type="button" id="gm-btn-npcs" class="gm-action-btn">
-              <span class="btn-icon">🤖</span> Respawnar NPCs
+
+          <!-- Tabbed Header -->
+          <div class="gm-tabs">
+            <button type="button" class="gm-tab-btn active" data-tab="builder">
+              🛠️ Construtor
             </button>
-            <button type="button" id="gm-btn-trees" class="gm-action-btn">
-              <span class="btn-icon">🌳</span> Respawnar Árvores
-            </button>
-            <button type="button" id="gm-btn-canopies" class="gm-action-btn">
-              <span class="btn-icon">☀️</span> Respawnar Tendas
-            </button>
-            <button type="button" id="gm-btn-lake" class="gm-action-btn">
-              <span class="btn-icon">💧</span> Respawnar Lago & Deck
-            </button>
-            <button type="button" id="gm-btn-all" class="gm-action-btn primary">
-              <span class="btn-icon">🔄</span> Respawnar Tudo
-            </button>
+            <button type="button" class="gm-tab-btn" data-tab="shortcuts">⌨️ Atalhos</button>
+            <button type="button" class="gm-tab-btn" data-tab="sound">🎵 Som & Rádio</button>
           </div>
-          <!-- Battle section -->
-          <div class="gm-section">
-            <h3>Batalha</h3>
-            <button type="button" id="gm-btn-spawn-mosquito" class="gm-action-btn">
-              <span class="btn-icon">🦟</span> Invocar Mosquito
-            </button>
-            <button type="button" id="gm-btn-spawn-barata" class="gm-action-btn">
-              <span class="btn-icon">🪳</span> Invocar Barata
-            </button>
-            <button type="button" id="gm-btn-spawn-pombo" class="gm-action-btn">
-              <span class="btn-icon">🕊️</span> Invocar Pombo
-            </button>
-            <button type="button" id="gm-btn-spawn-boss" class="gm-action-btn">
-              <span class="btn-icon">👑</span> Invocar Muriçoca Rainha
-            </button>
-            <button type="button" id="gm-btn-clear-mosquitos" class="gm-action-btn">
-              <span class="btn-icon">🧹</span> Limpar Inimigos
-            </button>
-          </div>
-          <!-- Builder Mode settings -->
-          <div class="gm-builder-mode-section">
-            <h3>Modo de Construção</h3>
-            <div class="gm-toggle-container">
-              <label>Construção Ativa:</label>
-              <button type="button" id="gm-btn-toggle-build" class="gm-toggle-btn">
-                Desativado
-              </button>
-            </div>
-            <div class="gm-build-select-container">
-              <label for="gm-select-build-type">Objeto:</label>
-              <select id="gm-select-build-type">
-                <option value="tree">🌳 Árvore</option>
-                <option value="canopy">☀️ Tenda Solar</option>
-                <option value="rock">🪨 Rocha</option>
-                <option value="plank">🪵 Bloco de Madeira</option>
-                <option value="lily">🪷 Vitória Régia</option>
+
+          <!-- TAB 1: BUILDER -->
+          <div id="gm-tab-content-builder" class="gm-tab-pane active">
+            <div class="gm-builder-mode-section">
+              <div class="gm-toggle-container">
+                <label>Construção Ativa:</label>
+                <button type="button" id="gm-btn-toggle-build" class="gm-toggle-btn">
+                  Desativado
+                </button>
+              </div>
+
+              <!-- Hidden select for main.ts compatibility -->
+              <select id="gm-select-build-type" style="display: none">
+                <option value="tree">tree</option>
+                <option value="canopy">canopy</option>
+                <option value="rock">rock</option>
+                <option value="plank">plank</option>
+                <option value="lily">lily</option>
+                <option value="npc:robot">npc:robot</option>
+                <option value="npc:joker">npc:joker</option>
+                <option value="npc:romance">npc:romance</option>
+                <option value="npc:vendor">npc:vendor</option>
+                <option value="monster:mosquito">monster:mosquito</option>
+                <option value="monster:barata">monster:barata</option>
+                <option value="monster:pombo">monster:pombo</option>
               </select>
+
+              <!-- Category Grid Selection -->
+              <div class="gm-grid-section">
+                <h4>Cenário</h4>
+                <div class="gm-card-grid">
+                  <div class="gm-card active" data-build="tree">
+                    <span class="card-emoji">🌳</span>
+                    <span class="card-name">Árvore</span>
+                  </div>
+                  <div class="gm-card" data-build="canopy">
+                    <span class="card-emoji">☀️</span>
+                    <span class="card-name">Tenda</span>
+                  </div>
+                  <div class="gm-card" data-build="rock">
+                    <span class="card-emoji">🪨</span>
+                    <span class="card-name">Rocha</span>
+                  </div>
+                  <div class="gm-card" data-build="plank">
+                    <span class="card-emoji">🪵</span>
+                    <span class="card-name">Bloco</span>
+                  </div>
+                  <div class="gm-card" data-build="lily">
+                    <span class="card-emoji">🪷</span>
+                    <span class="card-name">Vitória</span>
+                  </div>
+                </div>
+
+                <h4>NPCs (Personagens)</h4>
+                <div class="gm-card-grid">
+                  <div class="gm-card" data-build="npc:robot">
+                    <span class="card-emoji">🤖</span>
+                    <span class="card-name">Robô</span>
+                  </div>
+                  <div class="gm-card" data-build="npc:joker">
+                    <span class="card-emoji">🃏</span>
+                    <span class="card-name">Coringa</span>
+                  </div>
+                  <div class="gm-card" data-build="npc:romance">
+                    <span class="card-emoji">💘</span>
+                    <span class="card-name">Cupido</span>
+                  </div>
+                  <div class="gm-card" data-build="npc:vendor">
+                    <span class="card-emoji">🧺</span>
+                    <span class="card-name">Jurema</span>
+                  </div>
+                </div>
+
+                <h4>Monstros (Spawns Persistentes)</h4>
+                <div class="gm-card-grid">
+                  <div class="gm-card" data-build="monster:mosquito">
+                    <span class="card-emoji">🦟</span>
+                    <span class="card-name">Mosquito</span>
+                  </div>
+                  <div class="gm-card" data-build="monster:barata">
+                    <span class="card-emoji">🪳</span>
+                    <span class="card-name">Barata</span>
+                  </div>
+                  <div class="gm-card" data-build="monster:pombo">
+                    <span class="card-emoji">🕊️</span>
+                    <span class="card-name">Pombo</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Battle Section -->
+            <div class="gm-section-row">
+              <h3>Batalha Rápida</h3>
+              <div class="gm-buttons-row">
+                <button type="button" id="gm-btn-spawn-mosquito" class="gm-action-btn-mini">
+                  🦟 +1
+                </button>
+                <button type="button" id="gm-btn-spawn-barata" class="gm-action-btn-mini">
+                  🪳 +1
+                </button>
+                <button type="button" id="gm-btn-spawn-pombo" class="gm-action-btn-mini">
+                  🕊️ +1
+                </button>
+                <button type="button" id="gm-btn-spawn-boss" class="gm-action-btn-mini primary">
+                  👑 Rainha
+                </button>
+                <button type="button" id="gm-btn-clear-mosquitos" class="gm-action-btn-mini danger">
+                  🧹 Limpar
+                </button>
+              </div>
+            </div>
+
+            <!-- Respawns Section -->
+            <div class="gm-section-row">
+              <h3>Respawnadores Globais</h3>
+              <div class="gm-buttons-row">
+                <button type="button" id="gm-btn-npcs" class="gm-action-btn-mini">🤖 NPCs</button>
+                <button type="button" id="gm-btn-trees" class="gm-action-btn-mini">
+                  🌳 Árvores
+                </button>
+                <button type="button" id="gm-btn-canopies" class="gm-action-btn-mini">
+                  ☀️ Tendas
+                </button>
+                <button type="button" id="gm-btn-lake" class="gm-action-btn-mini">💧 Lago</button>
+                <button type="button" id="gm-btn-all" class="gm-action-btn-mini primary">
+                  🔄 Reset Tudo
+                </button>
+              </div>
+            </div>
+
+            <!-- Placed Objects section -->
+            <div class="gm-placed-list-section">
+              <h3>Elementos Posicionados</h3>
+              <div id="gm-placed-list" class="gm-placed-list">
+                <p class="empty-list-text">Nenhum objeto colocado ainda.</p>
+              </div>
             </div>
           </div>
-          <!-- Placed Objects section -->
-          <div class="gm-placed-list-section">
-            <h3>Objetos Colocados</h3>
-            <div id="gm-placed-list" class="gm-placed-list">
-              <p class="empty-list-text">Nenhum objeto colocado ainda.</p>
+
+          <!-- TAB 2: SHORTCUTS -->
+          <div id="gm-tab-content-shortcuts" class="gm-tab-pane">
+            <div class="gm-shortcuts-container">
+              <div class="shortcut-group">
+                <h4>🏃 Movimentação</h4>
+                <table class="shortcut-table">
+                  <tr>
+                    <td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> / <kbd>Setas</kbd></td>
+                    <td>Mover Personagem</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>Espaço</kbd></td>
+                    <td>Pular</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>Shift (segurar)</kbd></td>
+                    <td>Correr</td>
+                  </tr>
+                </table>
+              </div>
+
+              <div class="shortcut-group">
+                <h4>⚔️ Combate & Itens</h4>
+                <table class="shortcut-table">
+                  <tr>
+                    <td><kbd>1</kbd></td>
+                    <td>Equipar Vassoura (Melee)</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>2</kbd></td>
+                    <td>Equipar Chinelo (Ranged)</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>3</kbd></td>
+                    <td>Beber Suco de Laranja (Heal)</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>Clique Esquerdo</kbd></td>
+                    <td>Atacar com arma atual</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>Clique Direito</kbd></td>
+                    <td>Arremesso rápido de chinelo</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>Scroll Mouse</kbd></td>
+                    <td>Alternar armas (vassoura / chinelo)</td>
+                  </tr>
+                </table>
+              </div>
+
+              <div class="shortcut-group">
+                <h4>🛠️ Construção (Game Master)</h4>
+                <table class="shortcut-table">
+                  <tr>
+                    <td><kbd>B</kbd></td>
+                    <td>Abrir / Fechar Painel GM</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>Clique Esquerdo</kbd></td>
+                    <td>Posicionar elemento ativo</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>Clique Direito</kbd></td>
+                    <td>Destruir elemento mirado</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>Esc</kbd></td>
+                    <td>Sair do modo de construção / fechar painéis</td>
+                  </tr>
+                </table>
+              </div>
+
+              <div class="shortcut-group">
+                <h4>💬 Geral & Debug</h4>
+                <table class="shortcut-table">
+                  <tr>
+                    <td><kbd>Enter</kbd></td>
+                    <td>Abrir canal de chat</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>E</kbd></td>
+                    <td>Interagir com NPCs / outdoors / transições</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>C</kbd></td>
+                    <td>Alternar tamanho do chat (compacto)</td>
+                  </tr>
+                  <tr>
+                    <td><kbd>Ctrl + Shift + D</kbd></td>
+                    <td>Abrir/copiar log de debug</td>
+                  </tr>
+                </table>
+              </div>
             </div>
           </div>
+
+          <!-- TAB 3: SOUND & RADIO -->
+          <div id="gm-tab-content-sound" class="gm-tab-pane">
+            <div class="gm-sound-container">
+              <!-- Audio Controls Section -->
+              <div class="sound-sliders-group">
+                <h3>🎛️ Mixer de Som</h3>
+                <div class="volume-slider-row">
+                  <span class="slider-icon">🔊</span>
+                  <label>Geral:</label>
+                  <input type="range" id="volume-master" min="0" max="100" value="50" />
+                  <span id="volume-master-val" class="slider-val">50%</span>
+                </div>
+                <div class="volume-slider-row">
+                  <span class="slider-icon">⚔️</span>
+                  <label>Efeitos (SFX):</label>
+                  <input type="range" id="volume-sfx" min="0" max="100" value="60" />
+                  <span id="volume-sfx-val" class="slider-val">60%</span>
+                </div>
+                <div class="volume-slider-row">
+                  <span class="slider-icon">📻</span>
+                  <label>Música Rádio:</label>
+                  <input type="range" id="volume-radio" min="0" max="100" value="40" />
+                  <span id="volume-radio-val" class="slider-val">40%</span>
+                </div>
+              </div>
+
+              <!-- Radio Section -->
+              <div class="solarpunk-radio-group">
+                <h3>📻 Rádio Solarpunk</h3>
+                <div class="radio-player-card">
+                  <div class="radio-visualizer-container">
+                    <canvas id="radio-visualizer" width="340" height="70"></canvas>
+                  </div>
+                  <div class="radio-track-info">
+                    <span id="radio-track-name" class="track-name">Rádio Desativada</span>
+                    <span id="radio-track-genre" class="track-genre"
+                      >Ligue para começar a relaxar</span
+                    >
+                  </div>
+                  <div class="radio-controls">
+                    <button type="button" id="radio-btn-prev" class="radio-ctrl-btn">⏮️</button>
+                    <button type="button" id="radio-btn-play" class="radio-ctrl-btn play-btn">
+                      ▶️ Ligar
+                    </button>
+                    <button type="button" id="radio-btn-next" class="radio-ctrl-btn">⏭️</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="gm-panel-actions">
             <button type="button" id="gm-panel-close">Fechar</button>
           </div>

@@ -387,4 +387,19 @@ export class EnemyManager {
   get count(): number {
     return this.enemies.size;
   }
+
+  getGroups(): THREE.Group[] {
+    return Array.from(this.enemies.values()).map((e) => e.group);
+  }
+
+  getEnemyByObject(obj: THREE.Object3D): string | null {
+    for (const [id, enemy] of this.enemies.entries()) {
+      let current: THREE.Object3D | null = obj;
+      while (current) {
+        if (current === enemy.group) return id;
+        current = current.parent;
+      }
+    }
+    return null;
+  }
 }

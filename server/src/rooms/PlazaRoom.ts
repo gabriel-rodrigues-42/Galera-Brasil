@@ -128,15 +128,25 @@ export class PlazaRoom extends Room<PlazaState> {
       });
     });
 
-    this.onMessage('object_placed', (client, message) => {
-      this.broadcast('object_placed', message, { except: client });
-    });
+    this.onMessage(
+      'object_placed',
+      (client, message: { id: string; type: string; x: number; y: number; z: number }) => {
+        if (message.type && message.type.startsWith('monster:')) {
+          this.combat.addPersistentSpawn(message.id, message.type, message.x, message.z);
+        }
+        this.broadcast('object_placed', message, { except: client });
+      }
+    );
 
-    this.onMessage('object_removed', (client, message) => {
+    this.onMessage('object_removed', (client, message: { id: string }) => {
+      if (message.id) {
+        this.combat.removePersistentSpawn(message.id);
+      }
       this.broadcast('object_removed', message, { except: client });
     });
 
     this.onMessage('objects_cleared', (client) => {
+      this.combat.clearPersistentSpawns();
       this.broadcast('objects_cleared', {}, { except: client });
     });
 
