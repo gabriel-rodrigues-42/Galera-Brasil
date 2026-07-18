@@ -8,6 +8,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm --filter server typecheck && pnpm --filter client typecheck",
+    "knip": "knip",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -18,6 +19,7 @@
     "eslint": "^9.2.0",
     "eslint-config-prettier": "^9.1.0",
     "husky": "^9.0.11",
+    "knip": "^6.27.0",
     "lint-staged": "^15.2.2",
     "prettier": "^3.2.5",
     "typescript-eslint": "^7.8.0"
