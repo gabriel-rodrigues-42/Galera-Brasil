@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "galera-brasil",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-Command", "Remove-Item Env:PORT -ErrorAction SilentlyContinue; pnpm dev"],
       "port": 5173
     }
   ]
