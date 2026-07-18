@@ -117,6 +117,14 @@ export interface BonkEvent {
   dz: number;
 }
 
+export type ShopItemId =
+  | 'chinelo_reforcado'
+  | 'repelente'
+  | 'suco_laranja'
+  | 'super_vassoura'
+  | 'lanterna_ecologica'
+  | 'detector';
+
 export interface ShopPurchaseResultEvent {
   success: boolean;
   item: string;
@@ -384,7 +392,7 @@ export class Network {
     this._room?.send('gm_spawn_boss');
   }
 
-  sendShopPurchase(item: 'chinelo_reforcado' | 'repelente' | 'suco_laranja') {
+  sendShopPurchase(item: ShopItemId) {
     this._room?.send('shop_purchase', { item });
   }
 

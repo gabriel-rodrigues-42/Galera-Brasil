@@ -23,10 +23,12 @@ import { initGmController } from './ui/controllers/gm-controller';
 import { initHubPanelsController } from './ui/controllers/hub-panels-controller';
 import { initJoinController } from './ui/controllers/join-controller';
 import { initGameController } from './ui/controllers/game-controller';
+import { initNpcPanelController } from './ui/controllers/npc-panel-controller';
 import type { JoinOverlay } from './ui/components/join-overlay';
 import type { GuestbookPanel } from './ui/components/guestbook-panel';
 import type { PostPanel } from './ui/components/post-panel';
 import type { AddPostPanel } from './ui/components/add-post-panel';
+import type { NpcPanel } from './ui/components/npc-panel';
 import type { GameTimerHud } from './ui/components/game-timer-hud';
 import type { GameQuestGuide } from './ui/components/game-quest-guide';
 import type { GameAssemblyOverlay } from './ui/components/game-assembly-overlay';
@@ -66,20 +68,7 @@ const chatCardHintEl = document.querySelector<HTMLSpanElement>('#chat-card-hint'
 const chatUnreadEl = document.querySelector<HTMLSpanElement>('#chat-card-unread')!;
 const chatInputEl = document.querySelector<HTMLInputElement>('#chat-input')!;
 
-// NPC UI selectors
-const npcPanelEl = document.querySelector<HTMLDivElement>('#npc-panel')!;
-const npcPanelNameEl = document.querySelector<HTMLHeadingElement>('#npc-panel-name')!;
-const npcPanelTextEl = document.querySelector<HTMLParagraphElement>('#npc-panel-text')!;
-const npcPanelRewardEl = document.querySelector<HTMLDivElement>('#npc-panel-sticker-reward')!;
-const npcShopEl = document.querySelector<HTMLDivElement>('#npc-shop')!;
-const npcShopChineloEl = document.querySelector<HTMLButtonElement>('#npc-shop-chinelo')!;
-const npcShopRepelenteEl = document.querySelector<HTMLButtonElement>('#npc-shop-repelente')!;
-const npcShopSucoEl = document.querySelector<HTMLButtonElement>('#npc-shop-suco')!;
-const npcBtnActionEl = document.querySelector<HTMLButtonElement>('#npc-btn-action')!;
-const npcBtnStickerEl = document.querySelector<HTMLButtonElement>('#npc-btn-sticker')!;
-const npcPanelCloseEl = document.querySelector<HTMLButtonElement>('#npc-panel-close')!;
-const npcStickersListEl = document.querySelector<HTMLDivElement>('#npc-panel-stickers-list')!;
-const npcStickerSectionEl = document.querySelector<HTMLDivElement>('#npc-panel-stickers-section')!;
+const npcPanelEl = document.querySelector<NpcPanel>('#npc-panel')!;
 
 // Game Master UI selectors (badge/panel/builder tab are now components — see
 // ui/controllers/gm-controller.ts; the sound & permissions tabs stay legacy
@@ -551,8 +540,7 @@ let mode: Mode = 'plaza';
 let currentHubOwner: string | null = null;
 let hubTransitionInFlight = false;
 let myName = '';
-// (guestbookOpen/openPost moved to hubPanelsController)
-let openNpc: NpcDef | null = null;
+// (guestbookOpen/openPost moved to hubPanelsController; openNpc moved to npcPanelController)
 let currentBuildType: BuildType = 'tree';
 let builderModeActive = false;
 const gmPlacedObjects: THREE.Object3D[] = [];
@@ -735,7 +723,7 @@ const combat: CombatManager = new CombatManager({
     !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen &&
     !hubPanelsController.isPostOpen &&
-    !openNpc &&
+    !npcPanelController.isOpen &&
     !network.room?.state.players.get(network.sessionId)?.isGhost,
   canSwitch: () =>
     connected &&
@@ -766,11 +754,7 @@ network.onSelfChange = (state) => {
   combat.handleSelfState(state);
 };
 network.onBossEvent = (event) => combat.handleBossEvent(event);
-network.onShopPurchaseResult = (event) => {
-  if (!openNpc || openNpc.id !== 'vendor') return;
-  npcPanelRewardEl.innerHTML = `${event.success ? '✅' : '❌'} ${event.message}`;
-  npcPanelRewardEl.classList.remove('hidden');
-};
+// network.onShopPurchaseResult is wired by npcPanelController below.
 
 const joinController = initJoinController({
   overlay,
@@ -920,7 +904,7 @@ function resumeAfterUI() {
 window.addEventListener('keydown', (e) => {
   if (e.code !== 'Escape' || !pointerReleasedForUI) return;
   if (hubPanelsController.isPostOpen) hubPanelsController.closePost();
-  if (openNpc) closeNpcPanel();
+  if (npcPanelController.isOpen) npcPanelController.close();
   if (hubPanelsController.isAddPostOpen) hubPanelsController.closeAddPost();
   if (gmController.isOpen) gmController.close();
   if (hubPanelsController.isGuestbookOpen) hubPanelsController.closeGuestbook();
@@ -947,7 +931,7 @@ controls.addEventListener('unlock', () => {
   document.body.classList.remove('locked');
   hintEl.classList.add('hidden');
   hubPanelsController.closePost();
-  closeNpcPanel();
+  npcPanelController.close();
   closeChatInput();
   hubPanelsController.closeAddPost();
   log('info', 'pointer lock RELEASED');
@@ -1432,7 +1416,7 @@ window.addEventListener('keydown', (e) => {
     !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen &&
     !hubPanelsController.isPostOpen &&
-    !openNpc
+    !npcPanelController.isOpen
   ) {
     setChatCompact(!chatCompact);
   }
@@ -1442,7 +1426,7 @@ window.addEventListener('keydown', (e) => {
     !chatInputOpen &&
     !hubPanelsController.isAddPostOpen &&
     !hubPanelsController.isPostOpen &&
-    !openNpc
+    !npcPanelController.isOpen
   ) {
     if (gmController.isOpen) {
       gmController.close();
@@ -1614,241 +1598,6 @@ function exitHub() {
   );
 }
 
-// --- NPC & Sticker Panel UI Handlers -------------------------------------------
-
-const STICKERS = [
-  {
-    id: 'sticker_robot_1',
-    name: 'Microchip de Ouro',
-    emoji: '🪙',
-    description: 'Concedido pelo Robô por dominar atalhos do PC.',
-    npcType: 'robot',
-  },
-  {
-    id: 'sticker_robot_2',
-    name: 'Fibra Óptica Express',
-    emoji: '⚡',
-    description: 'Concedido pelo Robô por demonstrar conexão rápida.',
-    npcType: 'robot',
-  },
-  {
-    id: 'sticker_robot_3',
-    name: 'Super Antena 5G',
-    emoji: '📡',
-    description: 'Concedido pelo Robô por captar excelentes dicas.',
-    npcType: 'robot',
-  },
-  {
-    id: 'sticker_joker_1',
-    name: 'Risada Suprema',
-    emoji: '🎭',
-    description: 'Concedido pelo Coringa após ouvir uma ótima piada.',
-    npcType: 'joker',
-  },
-  {
-    id: 'sticker_joker_2',
-    name: 'Buzina Maluca',
-    emoji: '📯',
-    description: 'Concedido pelo Coringa por espalhar bom humor.',
-    npcType: 'joker',
-  },
-  {
-    id: 'sticker_joker_3',
-    name: 'Torta Flutuante',
-    emoji: '🥧',
-    description: 'Concedido pelo Coringa por sobreviver ao stand-up.',
-    npcType: 'joker',
-  },
-  {
-    id: 'sticker_romance_1',
-    name: 'Flecha do Cupido',
-    emoji: '💘',
-    description: 'Concedido pelo Romântico por demonstrar carisma.',
-    npcType: 'romance',
-  },
-  {
-    id: 'sticker_romance_2',
-    name: 'Coração Pixelado',
-    emoji: '💖',
-    description: 'Concedido pelo Romântico para corações apaixonados.',
-    npcType: 'romance',
-  },
-  {
-    id: 'sticker_romance_3',
-    name: 'Poção do Amor',
-    emoji: '🧪',
-    description: 'Concedido pelo Romântico para encontros perfeitos.',
-    npcType: 'romance',
-  },
-  {
-    id: 'sticker_vendor_1',
-    name: 'Cesta de Vime',
-    emoji: '🧺',
-    description: 'Concedido por Dona Jurema por visitar a feira livre.',
-    npcType: 'vendor',
-  },
-  {
-    id: 'sticker_vendor_2',
-    name: 'Chinelo de Ouro',
-    emoji: '🩴',
-    description: 'Concedido por Dona Jurema por ser um cliente fiel.',
-    npcType: 'vendor',
-  },
-  {
-    id: 'sticker_vendor_3',
-    name: 'Suco Natural',
-    emoji: '🍊',
-    description: 'Concedido por Dona Jurema por valorizar a saúde.',
-    npcType: 'vendor',
-  },
-];
-
-function renderStickerAlbum(npcType: 'robot' | 'joker' | 'romance' | 'vendor') {
-  const npcStickers = STICKERS.filter((s) => s.npcType === npcType);
-  npcStickersListEl.innerHTML = npcStickers
-    .map((sticker) => {
-      const isUnlocked = stickersCollected.includes(sticker.id);
-      const klass = isUnlocked ? 'sticker-item unlocked' : 'sticker-item locked';
-      return `
-        <div class="${klass}" title="${sticker.description}">
-          <div class="sticker-emoji">${sticker.emoji}</div>
-          <div class="sticker-name">${sticker.name}</div>
-          <div class="sticker-desc">${sticker.description}</div>
-        </div>
-      `;
-    })
-    .join('');
-}
-
-function openNpcPanel(npc: NpcDef) {
-  openNpc = npc;
-  npcPanelNameEl.textContent = npc.displayName;
-  npcPanelRewardEl.classList.add('hidden');
-  npcPanelRewardEl.textContent = '';
-  npcShopEl.classList.add('hidden');
-
-  if (npc.id === 'robot') {
-    npcBtnActionEl.textContent = 'Pedir Dica';
-    npcPanelTextEl.textContent =
-      'Olá! Eu sou o Robô da Net. Quer aprender algum atalho ou truque de computador?';
-    npcBtnActionEl.classList.remove('hidden');
-    npcBtnStickerEl.classList.remove('hidden');
-    npcStickerSectionEl.classList.remove('hidden');
-    renderStickerAlbum(npc.id);
-  } else if (npc.id === 'joker') {
-    npcBtnActionEl.textContent = 'Pedir Piada';
-    npcPanelTextEl.textContent =
-      'Olá! Eu sou o Coringa do Feirão. Preparado para dar umas risadas?';
-    npcBtnActionEl.classList.remove('hidden');
-    npcBtnStickerEl.classList.remove('hidden');
-    npcStickerSectionEl.classList.remove('hidden');
-    renderStickerAlbum(npc.id);
-  } else if (npc.id === 'romance') {
-    npcBtnActionEl.textContent = 'Pedir Cantada / Encontro';
-    npcPanelTextEl.textContent =
-      'Olá! Eu sou o Cupido Solarpunk. Procurando ideias de encontros ou cantadas românticas?';
-    npcBtnActionEl.classList.remove('hidden');
-    npcBtnStickerEl.classList.remove('hidden');
-    npcStickerSectionEl.classList.remove('hidden');
-    renderStickerAlbum(npc.id);
-  } else if (npc.id === 'vendor') {
-    npcBtnActionEl.textContent = 'Falar com Feirante';
-    npcPanelTextEl.textContent =
-      'Bem-vindo à feira! Tenho reforço para chinelo, repelente e suco para voltar à luta.';
-    npcBtnActionEl.classList.remove('hidden');
-    npcBtnStickerEl.classList.remove('hidden');
-    npcStickerSectionEl.classList.remove('hidden');
-    npcShopEl.classList.remove('hidden');
-    renderStickerAlbum(npc.id);
-  } else {
-    npcPanelTextEl.textContent = 'Olá!';
-    npcBtnActionEl.classList.add('hidden');
-    npcBtnStickerEl.classList.add('hidden');
-    npcStickerSectionEl.classList.add('hidden');
-  }
-
-  npcPanelEl.classList.remove('hidden');
-  velocity.set(0, 0, 0);
-  releasePointerForUI();
-  log('info', `NPC panel opened: ${npc.id}`);
-}
-
-function closeNpcPanel() {
-  openNpc = null;
-  npcPanelEl.classList.add('hidden');
-  log('info', 'NPC panel closed');
-}
-
-npcPanelCloseEl.addEventListener('click', () => {
-  closeNpcPanel();
-  resumeAfterUI();
-});
-
-npcBtnActionEl.addEventListener('click', () => {
-  if (!openNpc) return;
-  npcPanelRewardEl.classList.add('hidden');
-
-  api
-    .getRandomNpcDialogue(openNpc.id)
-    .then((res) => {
-      npcPanelTextEl.textContent = res.content;
-      log('info', `Fetched dialogue for ${openNpc?.id}: ${res.content}`);
-    })
-    .catch((err) => {
-      log('error', `Failed to fetch NPC dialogue: ${err}`);
-      npcPanelTextEl.textContent = 'Ops, deu um erro de conexão ao falar com o NPC!';
-    });
-});
-
-npcBtnStickerEl.addEventListener('click', () => {
-  if (!openNpc || !myName) return;
-  const npcId = openNpc.id;
-
-  api
-    .claimNpcSticker(myName, openNpc.id)
-    .then((res) => {
-      if (res.success && res.sticker) {
-        if (!stickersCollected.includes(res.sticker.id)) {
-          stickersCollected.push(res.sticker.id);
-        }
-        renderStickerAlbum(npcId);
-        npcPanelRewardEl.innerHTML = `🎉 <strong>Sticker Desbloqueado!</strong> Você ganhou o sticker <strong>${res.sticker.emoji} ${res.sticker.name}</strong>!<br><span style="font-size:0.85rem">${res.sticker.description}</span>`;
-        npcPanelRewardEl.classList.remove('hidden');
-        log('info', `Claimed sticker ${res.sticker.id}`);
-      } else if (res.error === 'cooldown') {
-        const secs = Math.ceil((res.remainingTimeMs ?? 0) / 1000);
-        npcPanelRewardEl.innerHTML = `⏳ <strong>Calma lá!</strong> O NPC está descansando. Tente novamente em <strong>${secs}s</strong>.`;
-        npcPanelRewardEl.classList.remove('hidden');
-      } else if (res.error === 'already_all') {
-        npcPanelRewardEl.innerHTML = `🏆 <strong>Álbum Cheio!</strong> Você já coletou todos os stickers de ${openNpc?.displayName}!`;
-        npcPanelRewardEl.classList.remove('hidden');
-      } else {
-        npcPanelRewardEl.innerHTML = `❌ Erro ao reivindicar: ${res.error}`;
-        npcPanelRewardEl.classList.remove('hidden');
-      }
-    })
-    .catch((err) => {
-      log('error', `Failed to claim sticker: ${err}`);
-      npcPanelRewardEl.innerHTML = `❌ Erro de conexão com o servidor.`;
-      npcPanelRewardEl.classList.remove('hidden');
-    });
-});
-
-npcShopChineloEl.addEventListener('click', () => {
-  if (!openNpc || openNpc.id !== 'vendor') return;
-  network.sendShopPurchase('chinelo_reforcado');
-});
-
-npcShopRepelenteEl.addEventListener('click', () => {
-  if (!openNpc || openNpc.id !== 'vendor') return;
-  network.sendShopPurchase('repelente');
-});
-
-npcShopSucoEl.addEventListener('click', () => {
-  if (!openNpc || openNpc.id !== 'vendor') return;
-  network.sendShopPurchase('suco_laranja');
-});
-
 // --- updateInteraction ---------------------------------------------------------
 
 function updateInteraction() {
@@ -1882,7 +1631,7 @@ function updateInteraction() {
     }
 
     // Raycast against NPCs in plaza
-    if (!nearEntranceOwner && !openNpc && !hubPanelsController.isPostOpen) {
+    if (!nearEntranceOwner && !npcPanelController.isOpen && !hubPanelsController.isPostOpen) {
       camera.getWorldPosition(raycastOrigin);
       camera.getWorldDirection(raycastDir);
       raycaster.set(raycastOrigin, raycastDir);
@@ -1893,7 +1642,12 @@ function updateInteraction() {
     }
 
     // Raycast against active debris in plaza
-    if (!nearEntranceOwner && !hoveredNpc && !openNpc && !hubPanelsController.isPostOpen) {
+    if (
+      !nearEntranceOwner &&
+      !hoveredNpc &&
+      !npcPanelController.isOpen &&
+      !hubPanelsController.isPostOpen
+    ) {
       const activeDebrisGroups: THREE.Group[] = [];
       clientDebris.forEach((entry) => {
         if (entry.state.status !== 'cleared') {
@@ -1958,7 +1712,7 @@ function updateInteraction() {
 
   if (hubPanelsController.isPostOpen) {
     hint = 'Pressione E para fechar';
-  } else if (openNpc) {
+  } else if (npcPanelController.isOpen) {
     hint = 'Pressione E para fechar';
   } else if (hubPanelsController.isGuestbookOpen) {
     hint = 'Pressione E para fechar';
@@ -1994,8 +1748,8 @@ function updateInteraction() {
     if (hubPanelsController.isPostOpen) {
       hubPanelsController.closePost();
       resumeAfterUI();
-    } else if (openNpc) {
-      closeNpcPanel();
+    } else if (npcPanelController.isOpen) {
+      npcPanelController.close();
       resumeAfterUI();
     } else if (hubPanelsController.isGuestbookOpen) {
       hubPanelsController.closeGuestbook();
@@ -2019,7 +1773,7 @@ function updateInteraction() {
         hubPanelsController.openPost(hovered.post);
       }
     } else if (hoveredNpc) {
-      openNpcPanel(hoveredNpc);
+      npcPanelController.open(hoveredNpc);
     } else if (nearMegaphone) {
       network.sendCallMeeting();
     } else if (mode === 'plaza' && nearEntranceOwner) {
@@ -2182,6 +1936,21 @@ const hubPanelsController = initHubPanelsController({
   rebuildHub: (owner) => hubManager.rebuild(owner).then(() => {}),
 });
 
+const npcPanelController = initNpcPanelController({
+  npcPanel: npcPanelEl,
+  network,
+
+  getMyName: () => (myName ? myName : null),
+  getCollectedStickers: () => stickersCollected,
+  addCollectedSticker: (id) => {
+    if (!stickersCollected.includes(id)) stickersCollected.push(id);
+  },
+
+  resetVelocity: () => velocity.set(0, 0, 0),
+  releasePointerForUI,
+  resumeAfterUI,
+});
+
 const gmController = initGmController({
   badge: gmHelpBadgeEl,
   panel: gmPanelEl,
@@ -2194,7 +1963,7 @@ const gmController = initGmController({
   isChatInputOpen: () => chatInputOpen,
   isAddPostOpen: () => hubPanelsController.isAddPostOpen,
   hasOpenPost: () => hubPanelsController.isPostOpen,
-  hasOpenNpc: () => !!openNpc,
+  hasOpenNpc: () => npcPanelController.isOpen,
 
   resetKeys: () => Object.keys(keys).forEach((code) => (keys[code] = false)),
   resetVelocity: () => velocity.set(0, 0, 0),

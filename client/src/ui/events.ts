@@ -29,6 +29,10 @@ export const POST_SUBMIT = 'post-submit';
 export const JOIN_SUBMIT = 'join-submit';
 export const RESUME_CLICK = 'resume-click';
 
+export const NPC_ACTION = 'npc-action';
+export const NPC_CLAIM_STICKER = 'npc-claim-sticker';
+export const NPC_SHOP_BUY = 'npc-shop-buy';
+
 export type EnemyKind = 'mosquito' | 'barata' | 'pombo';
 export type RespawnTarget = 'npcs' | 'trees' | 'canopies' | 'lake' | 'all';
 export type GmTab = 'builder' | 'shortcuts' | 'sound' | 'permissions';
@@ -76,4 +80,7 @@ export interface PostSubmitDetail {
 }
 export interface JoinSubmitDetail {
   name: string;
+}
+export interface NpcShopBuyDetail {
+  item: string;
 }

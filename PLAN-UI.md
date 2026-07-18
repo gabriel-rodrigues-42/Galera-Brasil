@@ -75,13 +75,14 @@ Deletions across Phase 1 (final tally): `#gm-panel` block in index.html (~330 li
 
 ☑ Verified: comments render, HTML escaped literally, reactions increment, form submits and refreshes. Modal closes correctly, movement lock functions as intended.
 
-## Phase 3 — NPC panel + shop ⬜
+## Phase 3 — NPC panel + shop ✅
 
-- `<npc-panel>`: `open(npc, collectedStickers)`, `setDialogue(text)`, `showReward(...)`; shop grid + sticker album rendered from data arrays. Events: `npc-action`, `npc-claim-sticker`, `npc-shop-buy {item}`, `panel-close`.
-- New `client/src/ui/controllers/npc-panel-controller.ts` absorbs main.ts:1873–2104 + the `onShopPurchaseResult` binding.
-- Delete: NPC CSS section; index.html NPC block.
+- [x] `<npc-panel>`: `open(npc, collectedStickers)`, `setDialogue(text)`, `showReward(...)`, `refreshStickerAlbum(...)`; shop grid + sticker album rendered from data arrays (`client/src/ui/npc-catalog.ts`). Events: `npc-action`, `npc-claim-sticker`, `npc-shop-buy {item}`, `panel-close`.
+- [x] New `client/src/ui/controllers/npc-panel-controller.ts` absorbs the old `openNpcPanel`/`closeNpcPanel`/dialogue-fetch/sticker-claim/shop-buy handlers + the `onShopPurchaseResult` binding.
+- [x] Delete: NPC CSS section (~265 lines); index.html NPC block (collapsed to `<npc-panel id="npc-panel" hidden></npc-panel>`).
+- [x] Bonus (closes a PLAN-3.0.md 3.2 gap found while building this phase): the shop grid now also lists **Super Vassoura**, **Lanterna Ecológica**, and **Detector de Sabotagem** — the server (`combat.ts`) already fully implemented these three purchases and the `superVassoura`/`lanternaEcologica`/`hasDetector` schema flags, but no client UI ever offered them for sale. `network.ts`'s `sendShopPurchase`/`ShopItemId` widened to cover all six items.
 
-☑ Verify: E on each NPC type → correct title/actions; Pedir Dica fetches dialogue; sticker claim shows reward/cooldown and album unlock; Jurema (vendor) shows the shop; buying with/without coins shows ✅/❌; purchases apply (shield bar appears, Suco count increments).
+☑ Verified live (browser + 6-bot headless): join → E on each NPC type shows correct title/greeting/action-label; Pedir Dica dispatches `npc-action` and fetches real dialogue; sticker claim/shop-buy/panel-close events all fire with correct payloads through the composed shadow-DOM boundary (including `ui-modal`'s built-in ✕); Jurema's panel shows all 6 shop items. Server round-trip verified with bots: purchasing all 3 new items near the (DB-persisted) placed vendor succeeds once coins are farmed via the mutirão minigame, sets the correct schema flags, and correctly rejects a re-purchase as `already_owned`. `pnpm typecheck && pnpm lint && pnpm knip && pnpm build` all clean.
 
 ## Phase 4 — Battle HUD ⬜
 
