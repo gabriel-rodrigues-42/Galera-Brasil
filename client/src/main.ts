@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { HUB_EXIT_ZONE, type Interactable } from './hub-builder';
 import { HubManager, ROOM_HALF, disposeObject3D } from './hub-manager';
-import type { HubPost } from './hub-types';
 import { log, initDebugPanel, updateStats, installGlobalErrorLogging } from './logger';
 import { Network } from './network';
 import { AvatarManager } from './avatars';
@@ -13,7 +12,6 @@ import { PickupManager } from './pickup-manager';
 import { CombatManager } from './combat';
 import { Hud } from './hud';
 import * as api from './api';
-import { escapeHtml } from './ui/escape';
 import { registerUiComponents } from './ui';
 import type { GmBadge } from './ui/components/gm-badge';
 import type { GmPanel } from './ui/components/gm-panel';
@@ -22,6 +20,12 @@ import type { GmSoundTab } from './ui/components/gm-sound-tab';
 import type { GmPermissionsTab, HubPermissionRow } from './ui/components/gm-permissions-tab';
 import type { BuilderStatus } from './ui/components/builder-status';
 import { initGmController } from './ui/controllers/gm-controller';
+import { initHubPanelsController } from './ui/controllers/hub-panels-controller';
+import { initJoinController } from './ui/controllers/join-controller';
+import type { JoinOverlay } from './ui/components/join-overlay';
+import type { GuestbookPanel } from './ui/components/guestbook-panel';
+import type { PostPanel } from './ui/components/post-panel';
+import type { AddPostPanel } from './ui/components/add-post-panel';
 import type { EnemyKind, RespawnTarget, VolumeChannel } from './ui/events';
 import { BUILD_TYPE_LABELS, type BuildType } from './ui/gm-catalog';
 import './ui/tokens.css';
@@ -36,46 +40,21 @@ log('info', 'main.ts starting');
 // --- Renderer / Scene / Camera -------------------------------------------------
 
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
-const overlay = document.querySelector<HTMLDivElement>('#overlay')!;
+const overlay = document.querySelector<JoinOverlay>('#overlay')!;
 const hintEl = document.querySelector<HTMLDivElement>('#interact-hint')!;
-const panelEl = document.querySelector<HTMLDivElement>('#post-panel')!;
-const panelContentEl = document.querySelector<HTMLDivElement>('#post-panel-content')!;
-const panelCloseEl = document.querySelector<HTMLButtonElement>('#post-panel-close')!;
+const guestbookPanelEl = document.querySelector<GuestbookPanel>('#guestbook-panel')!;
+const postPanelEl = document.querySelector<PostPanel>('#post-panel')!;
+const addPostPanelEl = document.querySelector<AddPostPanel>('#add-post-panel')!;
 
-// Guestbook selectors
-const guestbookPanelEl = document.querySelector<HTMLDivElement>('#guestbook-panel')!;
-const guestbookCommentsEl = document.querySelector<HTMLDivElement>('#guestbook-comments')!;
-const guestbookEmptyHintEl = document.querySelector<HTMLParagraphElement>('#guestbook-empty-hint')!;
-const guestbookFormSectionEl = document.querySelector<HTMLDivElement>('#guestbook-form-section')!;
-const guestbookFormEl = document.querySelector<HTMLFormElement>('#guestbook-form')!;
-const guestbookMessageInputEl = document.querySelector<HTMLTextAreaElement>(
-  '#guestbook-message-input'
-)!;
-const guestbookLockedMsgEl = document.querySelector<HTMLParagraphElement>('#guestbook-locked-msg')!;
-const guestbookSettingsSectionEl = document.querySelector<HTMLDivElement>(
-  '#guestbook-settings-section'
-)!;
-const guestbookAllowToggleEl = document.querySelector<HTMLInputElement>('#guestbook-allow-toggle')!;
-const guestbookPanelCloseEl = document.querySelector<HTMLButtonElement>('#guestbook-panel-close')!;
 const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
 const debugBadgeEl = document.querySelector<HTMLButtonElement>('#debug-badge')!;
 const debugStatsEl = document.querySelector<HTMLPreElement>('#debug-stats')!;
 const debugLogEl = document.querySelector<HTMLPreElement>('#debug-log')!;
-const joinFormEl = document.querySelector<HTMLFormElement>('#join-form')!;
-const nameInputEl = document.querySelector<HTMLInputElement>('#name-input')!;
-const quickPlayBtnEl = document.querySelector<HTMLButtonElement>('#quick-play-btn')!;
-const joinStatusEl = document.querySelector<HTMLParagraphElement>('#join-status')!;
-const resumeBlockEl = document.querySelector<HTMLDivElement>('#resume-block')!;
 const chatLogEl = document.querySelector<HTMLDivElement>('#chat-log')!;
 const chatCardEl = document.querySelector<HTMLDivElement>('#chat-card')!;
 const chatCardHintEl = document.querySelector<HTMLSpanElement>('#chat-card-hint')!;
 const chatUnreadEl = document.querySelector<HTMLSpanElement>('#chat-card-unread')!;
 const chatInputEl = document.querySelector<HTMLInputElement>('#chat-input')!;
-const addPostPanelEl = document.querySelector<HTMLDivElement>('#add-post-panel')!;
-const addPostFormEl = document.querySelector<HTMLFormElement>('#add-post-form')!;
-const postTitleInputEl = document.querySelector<HTMLInputElement>('#post-title-input')!;
-const postBodyInputEl = document.querySelector<HTMLTextAreaElement>('#post-body-input')!;
-const addPostCancelEl = document.querySelector<HTMLButtonElement>('#add-post-cancel')!;
 
 // NPC UI selectors
 const npcPanelEl = document.querySelector<HTMLDivElement>('#npc-panel')!;
@@ -440,8 +419,7 @@ let mode: Mode = 'plaza';
 let currentHubOwner: string | null = null;
 let hubTransitionInFlight = false;
 let myName = '';
-let openPost: HubPost | null = null;
-let guestbookOpen = false;
+// (guestbookOpen/openPost moved to hubPanelsController)
 let openNpc: NpcDef | null = null;
 let currentBuildType: BuildType = 'tree';
 let builderModeActive = false;
@@ -565,12 +543,16 @@ const combat: CombatManager = new CombatManager({
     mode === 'plaza' &&
     !combat.isDead &&
     !chatInputOpen &&
-    !addPostOpen &&
+    !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen &&
-    !openPost &&
+    !hubPanelsController.isPostOpen &&
     !openNpc,
   canSwitch: () =>
-    connected && controls.isLocked && !chatInputOpen && !addPostOpen && !gmController.isOpen,
+    connected &&
+    controls.isLocked &&
+    !chatInputOpen &&
+    !hubPanelsController.isAddPostOpen &&
+    !gmController.isOpen,
   velocity,
   onRespawn: () => {
     controls.object.position.set(0, 1.7, 8);
@@ -597,124 +579,90 @@ network.onShopPurchaseResult = (event) => {
   npcPanelRewardEl.classList.remove('hidden');
 };
 
-const SAVED_NAME_KEY = 'galera-brasil-name';
-nameInputEl.value = localStorage.getItem(SAVED_NAME_KEY) ?? '';
+const joinController = initJoinController({
+  overlay,
+  connect: (name) => network.connect(name),
+  ensureOwnHub: (name) => hubManager.ensureOwnHub(name),
+  setMyName: (name) => {
+    myName = name;
+    hubManager.setMyName(name);
+  },
+  setConnected: (val) => {
+    connected = val;
+  },
+  appendSystemChatLine: (text) => appendChatLine('', text, true),
+  requestLock,
+  onJoined: () => {
+    gmHelpBadgeEl.hidden = false;
 
-function updateOverlayMenuState() {
-  const trimmed = nameInputEl.value.trim().slice(0, 24);
-  const shouldShowQuickPlay = !connected && trimmed.length > 0;
-  quickPlayBtnEl.classList.toggle('hidden', !shouldShowQuickPlay);
-  quickPlayBtnEl.textContent = shouldShowQuickPlay ? `Jogar como ${trimmed}` : 'Jogar';
-}
+    // Listen for other players placing/removing objects in real-time
+    network.onObjectPlaced = (event) => {
+      if (gmPlacedObjects.some((o) => o.name === event.id)) return;
+      const pos = new THREE.Vector3(event.x, event.y, event.z);
+      spawnObjectAt(event.type as BuildType, pos, event.id);
+    };
 
-updateOverlayMenuState();
-nameInputEl.addEventListener('input', () => {
-  updateOverlayMenuState();
-});
+    network.onObjectRemoved = (id) => {
+      const target = gmPlacedObjects.find((o) => o.name === id);
+      if (target) {
+        scene.remove(target);
+        disposeObject3D(target);
+        const idx = gmPlacedObjects.indexOf(target);
+        if (idx !== -1) gmPlacedObjects.splice(idx, 1);
+      }
+      npcManager.removeNpc(id);
+      updatePlacedObjectsList();
+    };
 
-quickPlayBtnEl.addEventListener('click', () => {
-  joinFormEl.requestSubmit();
-});
+    network.onObjectsCleared = () => {
+      gmPlacedObjects.forEach((obj) => {
+        scene.remove(obj);
+        disposeObject3D(obj);
+      });
+      gmPlacedObjects.length = 0;
+      npcManager.destroy();
 
-joinFormEl.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const name =
-    nameInputEl.value.trim().slice(0, 24) || `Visitante${Math.floor(Math.random() * 900 + 100)}`;
-  const submitBtn = joinFormEl.querySelector('button')!;
-  submitBtn.disabled = true;
-  nameInputEl.disabled = true;
-  joinStatusEl.textContent = 'Conectando...';
+      setTimeout(() => {
+        api
+          .listPlacedObjects()
+          .then((objects) => {
+            objects.forEach((obj) => {
+              if (gmPlacedObjects.some((o) => o.name === obj.id)) return;
+              const pos = new THREE.Vector3(obj.x, obj.y, obj.z);
+              spawnObjectAt(obj.type as BuildType, pos, obj.id);
+            });
+            log('info', 'reloaded placed objects after global clear');
+            updatePlacedObjectsList();
+          })
+          .catch((err) => log('error', `failed to reload placed objects after clear: ${err}`));
+      }, 100);
+    };
 
-  network
-    .connect(name)
-    .then(() => hubManager.ensureOwnHub(name))
-    .then(() => {
-      localStorage.setItem(SAVED_NAME_KEY, name);
-      myName = name;
-      hubManager.setMyName(name);
-      connected = true;
-      // Server join broadcasts go to everyone EXCEPT the joiner, and there is
-      // no chat history replay — seed a local line so the card never starts empty.
-      appendChatLine('', 'Você entrou na praça', true);
-      joinFormEl.classList.add('hidden');
-      quickPlayBtnEl.classList.add('hidden');
-      joinStatusEl.textContent = '';
-      resumeBlockEl.classList.remove('hidden');
-      gmHelpBadgeEl.hidden = false;
-      requestLock();
-
-      // Listen for other players placing/removing objects in real-time
-      network.onObjectPlaced = (event) => {
-        if (gmPlacedObjects.some((o) => o.name === event.id)) return;
-        const pos = new THREE.Vector3(event.x, event.y, event.z);
-        spawnObjectAt(event.type as BuildType, pos, event.id);
-      };
-
-      network.onObjectRemoved = (id) => {
-        const target = gmPlacedObjects.find((o) => o.name === id);
-        if (target) {
-          scene.remove(target);
-          disposeObject3D(target);
-          const idx = gmPlacedObjects.indexOf(target);
-          if (idx !== -1) gmPlacedObjects.splice(idx, 1);
-        }
-        npcManager.removeNpc(id);
-        updatePlacedObjectsList();
-      };
-
-      network.onObjectsCleared = () => {
-        gmPlacedObjects.forEach((obj) => {
-          scene.remove(obj);
-          disposeObject3D(obj);
+    // Load initial placed objects from database
+    api
+      .listPlacedObjects()
+      .then((objects) => {
+        objects.forEach((obj) => {
+          if (gmPlacedObjects.some((o) => o.name === obj.id)) return;
+          const pos = new THREE.Vector3(obj.x, obj.y, obj.z);
+          spawnObjectAt(obj.type as BuildType, pos, obj.id);
         });
-        gmPlacedObjects.length = 0;
-        npcManager.destroy();
+        log('info', `loaded ${objects.length} placed objects from DB`);
+        updatePlacedObjectsList();
+      })
+      .catch((err) => log('error', `failed to load initial placed objects: ${err}`));
 
-        setTimeout(() => {
-          api
-            .listPlacedObjects()
-            .then((objects) => {
-              objects.forEach((obj) => {
-                if (gmPlacedObjects.some((o) => o.name === obj.id)) return;
-                const pos = new THREE.Vector3(obj.x, obj.y, obj.z);
-                spawnObjectAt(obj.type as BuildType, pos, obj.id);
-              });
-              log('info', 'reloaded placed objects after global clear');
-              updatePlacedObjectsList();
-            })
-            .catch((err) => log('error', `failed to reload placed objects after clear: ${err}`));
-        }, 100);
-      };
-
-      // Load initial placed objects from database
-      api
-        .listPlacedObjects()
-        .then((objects) => {
-          objects.forEach((obj) => {
-            if (gmPlacedObjects.some((o) => o.name === obj.id)) return;
-            const pos = new THREE.Vector3(obj.x, obj.y, obj.z);
-            spawnObjectAt(obj.type as BuildType, pos, obj.id);
-          });
-          log('info', `loaded ${objects.length} placed objects from DB`);
-          updatePlacedObjectsList();
-        })
-        .catch((err) => log('error', `failed to load initial placed objects: ${err}`));
-
-      api
-        .getPlayerStickers(name)
-        .then((stickers) => {
-          stickersCollected = stickers;
-          log('info', `loaded player stickers: ${stickers.join(', ')}`);
-        })
-        .catch((err) => log('error', `failed to load player stickers: ${err}`));
-    })
-    .catch((err) => {
-      log('error', `failed to connect: ${err}`);
-      joinStatusEl.textContent = 'Não foi possível conectar ao servidor. Tente novamente.';
-      submitBtn.disabled = false;
-      nameInputEl.disabled = false;
-    });
+    api
+      .getPlayerStickers(myName)
+      .then((stickers) => {
+        stickersCollected = stickers;
+        log('info', `loaded player stickers: ${stickers.join(', ')}`);
+      })
+      .catch((err) => log('error', `failed to load player stickers: ${err}`));
+  },
 });
+
+joinController.init();
 
 // `controls.lock()` fires-and-forgets `canvas.requestPointerLock()` without
 // capturing the promise it returns, so any rejection (e.g. Chrome's ~1.3s
@@ -725,10 +673,9 @@ function requestLock() {
   canvas.requestPointerLock().catch((err: DOMException) => {
     log('warn', `pointer lock request rejected: ${err.name} — ${err.message}`);
     if (err.name === 'SecurityError') {
-      joinStatusEl.textContent = 'Aguarde um instante e clique novamente.';
+      joinController.setStatus('Aguarde um instante e clique novamente.');
       setTimeout(() => {
-        if (joinStatusEl.textContent === 'Aguarde um instante e clique novamente.')
-          joinStatusEl.textContent = '';
+        joinController.setStatus('');
       }, 2000);
     }
   });
@@ -767,27 +714,15 @@ function resumeAfterUI() {
 // needs its own listener rather than relying on the 'unlock' event.
 window.addEventListener('keydown', (e) => {
   if (e.code !== 'Escape' || !pointerReleasedForUI) return;
-  if (openPost) closePostPanel();
+  if (hubPanelsController.isPostOpen) hubPanelsController.closePost();
   if (openNpc) closeNpcPanel();
-  if (addPostOpen) closeAddPostForm();
+  if (hubPanelsController.isAddPostOpen) hubPanelsController.closeAddPost();
   if (gmController.isOpen) gmController.close();
-  if (guestbookOpen) closeGuestbookPanel();
+  if (hubPanelsController.isGuestbookOpen) hubPanelsController.closeGuestbook();
   resumeAfterUI();
 });
 
-// The overlay sits visually on top of the canvas while visible, so it (not
-// the canvas) is what actually receives the click that should engage pointer
-// lock — only meaningful once already connected (the join form handles the
-// first connection, via its submit handler above).
-overlay.addEventListener('click', (e) => {
-  if (!connected || e.target === nameInputEl || (e.target as HTMLElement).closest('#join-form'))
-    return;
-  log(
-    'info',
-    `overlay clicked, requesting pointer lock (document.hasFocus=${document.hasFocus()}, visibilityState=${document.visibilityState})`
-  );
-  requestLock();
-});
+// (overlay click listener replaced by joinController resume-click event)
 controls.addEventListener('lock', () => {
   overlay.classList.add('hidden');
   document.body.classList.add('locked');
@@ -806,10 +741,10 @@ controls.addEventListener('unlock', () => {
   overlay.classList.remove('hidden');
   document.body.classList.remove('locked');
   hintEl.classList.add('hidden');
-  closePostPanel();
+  hubPanelsController.closePost();
   closeNpcPanel();
   closeChatInput();
-  closeAddPostForm();
+  hubPanelsController.closeAddPost();
   log('info', 'pointer lock RELEASED');
 });
 // PointerLockControls logs this to console itself but doesn't expose it as a
@@ -867,24 +802,7 @@ chatInputEl.addEventListener('keydown', (e) => {
 
 // --- Add-post form: only usable inside your own hub -----------------------------
 
-let addPostOpen = false;
-
-function openAddPostForm() {
-  addPostOpen = true;
-  Object.keys(keys).forEach((code) => (keys[code] = false));
-  addPostPanelEl.classList.remove('hidden');
-  postTitleInputEl.value = '';
-  postBodyInputEl.value = '';
-  postTitleInputEl.focus();
-  releasePointerForUI(); // let the mouse click Publicar/Cancelar
-}
-
-function closeAddPostForm() {
-  addPostOpen = false;
-  addPostPanelEl.classList.add('hidden');
-  postTitleInputEl.blur();
-  postBodyInputEl.blur();
-}
+// (addPostOpen/openAddPostForm/closeAddPostForm moved to hubPanelsController)
 
 // --- Builder Mode: Minecraft-style placement & raycasting preview --------------
 
@@ -1274,40 +1192,7 @@ function onGmRespawn(target: RespawnTarget) {
   }
 }
 
-// Ctrl/Cmd+Enter submits from either field (title or the multi-line body,
-// where plain Enter has to stay a newline) — a keyboard path for players who
-// don't want to reach for the mouse now that it's been released above.
-addPostFormEl.addEventListener('keydown', (e) => {
-  e.stopPropagation();
-  if (e.code === 'Escape') {
-    closeAddPostForm();
-    resumeAfterUI();
-  } else if (e.code === 'Enter' && (e.ctrlKey || e.metaKey)) {
-    e.preventDefault();
-    addPostFormEl.requestSubmit();
-  }
-});
-addPostCancelEl.addEventListener('click', () => {
-  closeAddPostForm();
-  resumeAfterUI();
-});
-
-addPostFormEl.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const title = postTitleInputEl.value.trim();
-  const body = postBodyInputEl.value.trim();
-  if (!title || !body || !currentHubOwner) return;
-
-  api
-    .addPost(currentHubOwner, { type: 'text', title, body })
-    .then(() => hubManager.rebuild(currentHubOwner!))
-    .then(() => {
-      log('info', `post added to hub "${currentHubOwner}": "${title}"`);
-      closeAddPostForm();
-      resumeAfterUI();
-    })
-    .catch((err) => log('error', `failed to add post: ${err}`));
-});
+// (addPostForm listeners moved to add-post-panel component)
 
 const keys: Record<string, boolean> = {};
 let eJustPressed = false;
@@ -1317,36 +1202,43 @@ window.addEventListener('keydown', (e) => {
   if (
     e.code === 'Enter' &&
     controls.isLocked &&
-    !openPost &&
+    !hubPanelsController.isPostOpen &&
     !chatInputOpen &&
-    !addPostOpen &&
+    !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen
   )
     openChatInput();
   if (
     e.code === 'KeyN' &&
     controls.isLocked &&
-    !openPost &&
+    !hubPanelsController.isPostOpen &&
     !chatInputOpen &&
-    !addPostOpen &&
+    !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen &&
     mode === 'hub' &&
     currentHubOwner === myName
   ) {
-    openAddPostForm();
+    hubPanelsController.openAddPost();
   }
   if (
     e.code === 'KeyC' &&
     connected &&
     !chatInputOpen &&
-    !addPostOpen &&
+    !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen &&
-    !openPost &&
+    !hubPanelsController.isPostOpen &&
     !openNpc
   ) {
     setChatCompact(!chatCompact);
   }
-  if (e.code === 'KeyB' && connected && !chatInputOpen && !addPostOpen && !openPost && !openNpc) {
+  if (
+    e.code === 'KeyB' &&
+    connected &&
+    !chatInputOpen &&
+    !hubPanelsController.isAddPostOpen &&
+    !hubPanelsController.isPostOpen &&
+    !openNpc
+  ) {
     if (gmController.isOpen) {
       gmController.close();
       resumeAfterUI();
@@ -1368,7 +1260,13 @@ function isDown(...codes: string[]): boolean {
 
 function updateMovement(delta: number) {
   // frozen while a UI panel is open or while fainted (death overlay showing)
-  if (openPost || chatInputOpen || addPostOpen || combat.isDead) return;
+  if (
+    hubPanelsController.isPostOpen ||
+    chatInputOpen ||
+    hubPanelsController.isAddPostOpen ||
+    combat.isDead
+  )
+    return;
 
   // Damping
   velocity.x -= velocity.x * 8 * delta;
@@ -1432,85 +1330,9 @@ function findInteractable(hit: THREE.Object3D, interactables: Interactable[]): I
   return null;
 }
 
-function renderPostPanel(post: HubPost): string {
-  if (post.type === 'image') {
-    return `
-      <div class="panel-photo" style="background: linear-gradient(135deg, ${escapeHtml(post.accentColor)}, #1c1c22)"></div>
-      <p class="panel-caption">${escapeHtml(post.caption)}</p>
-    `;
-  }
-  if (post.type === 'text') {
-    return `<h2>${escapeHtml(post.title)}</h2><p>${escapeHtml(post.body)}</p>`;
-  }
-  if (post.type === 'link') {
-    return `
-      <h2>${escapeHtml(post.label)}</h2>
-      <p>${escapeHtml(post.description)}</p>
-      <a href="${encodeURI(post.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(post.url)}</a>
-    `;
-  }
-  return '';
-}
+// (renderPostPanel moved to post-panel component)
 
-function openPostPanel(post: HubPost) {
-  openPost = post;
-  panelContentEl.innerHTML = renderPostPanel(post);
-  panelEl.classList.remove('hidden');
-  velocity.set(0, 0, 0);
-  releasePointerForUI(); // lets the mouse click a link post's URL or the Fechar button
-  log('info', `post panel opened: ${post.type}/${post.id}`);
-}
-
-function closePostPanel() {
-  openPost = null;
-  panelEl.classList.add('hidden');
-  log('info', 'post panel closed');
-}
-
-function openGuestbookPanel() {
-  if (!currentHubOwner) return;
-  guestbookOpen = true;
-  guestbookPanelEl.classList.remove('hidden');
-  velocity.set(0, 0, 0);
-  releasePointerForUI();
-
-  api
-    .getHub(currentHubOwner)
-    .then((hub) => {
-      const guestbookPosts = hub.posts.filter((p) => p.type === 'guestbook') as Extract<
-        HubPost,
-        { type: 'guestbook' }
-      >[];
-
-      const isOwner = currentHubOwner === myName;
-      if (isOwner) {
-        guestbookSettingsSectionEl.classList.remove('hidden');
-        guestbookAllowToggleEl.checked = hub.allowVisitorPosts;
-        guestbookFormSectionEl.classList.add('hidden');
-        guestbookLockedMsgEl.classList.add('hidden');
-      } else {
-        guestbookSettingsSectionEl.classList.add('hidden');
-        if (hub.allowVisitorPosts) {
-          guestbookFormSectionEl.classList.remove('hidden');
-          guestbookLockedMsgEl.classList.add('hidden');
-        } else {
-          guestbookFormSectionEl.classList.add('hidden');
-          guestbookLockedMsgEl.classList.remove('hidden');
-        }
-      }
-
-      renderGuestbookComments(guestbookPosts);
-    })
-    .catch((err) => {
-      log('error', `Failed to load guestbook for ${currentHubOwner}: ${err}`);
-    });
-}
-
-function closeGuestbookPanel() {
-  guestbookOpen = false;
-  guestbookPanelEl.classList.add('hidden');
-  log('info', 'guestbook panel closed');
-}
+// (openPostPanel/closePostPanel/openGuestbookPanel/closeGuestbookPanel moved to hubPanelsController)
 
 function refreshGmPermissionsTab() {
   gmPermissionsTabEl.setLoading();
@@ -1543,114 +1365,7 @@ function refreshGmPermissionsTab() {
     });
 }
 
-function renderGuestbookComments(posts: Extract<HubPost, { type: 'guestbook' }>[]) {
-  if (posts.length === 0) {
-    guestbookEmptyHintEl.classList.remove('hidden');
-    guestbookCommentsEl.innerHTML = '';
-    return;
-  }
-  guestbookEmptyHintEl.classList.add('hidden');
-
-  guestbookCommentsEl.innerHTML = posts
-    .slice()
-    .reverse() // show newest comments on top!
-    .map((post) => {
-      const reactions = post.reactions || { thumbs: 0, heart: 0, orange: 0 };
-      return `
-        <div class="guestbook-comment-card" data-post-id="${post.id}">
-          <div class="guestbook-comment-header">
-            <span class="guestbook-comment-author">✏️ ${escapeHtml(post.author)}</span>
-          </div>
-          <div class="guestbook-comment-body">${escapeHtml(post.message)}</div>
-          <div class="guestbook-comment-reactions">
-            <button class="guestbook-reaction-btn" data-emoji="thumbs">
-              👍 <span class="reaction-count">${reactions.thumbs || 0}</span>
-            </button>
-            <button class="guestbook-reaction-btn" data-emoji="heart">
-              ❤️ <span class="reaction-count">${reactions.heart || 0}</span>
-            </button>
-            <button class="guestbook-reaction-btn" data-emoji="orange">
-              🍊 <span class="reaction-count">${reactions.orange || 0}</span>
-            </button>
-          </div>
-        </div>
-      `;
-    })
-    .join('');
-}
-
-panelCloseEl.addEventListener('click', () => {
-  closePostPanel();
-  resumeAfterUI();
-});
-
-guestbookPanelCloseEl.addEventListener('click', () => {
-  closeGuestbookPanel();
-  resumeAfterUI();
-});
-
-guestbookFormEl.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const message = guestbookMessageInputEl.value.trim();
-  const owner = currentHubOwner;
-  if (!message || !owner || !myName) return;
-
-  api
-    .addPost(owner, {
-      type: 'guestbook',
-      author: myName,
-      message,
-      isGm: true,
-    })
-    .then(() => {
-      guestbookMessageInputEl.value = '';
-      openGuestbookPanel();
-      hubManager.rebuild(owner);
-    })
-    .catch((err) => {
-      log('error', `Failed to submit guest message: ${err}`);
-    });
-});
-
-guestbookAllowToggleEl.addEventListener('change', () => {
-  if (!currentHubOwner || currentHubOwner !== myName) return;
-  const allowed = guestbookAllowToggleEl.checked;
-  api
-    .updateHubSettings(currentHubOwner, allowed)
-    .then((res) => {
-      if (res.success) {
-        log('info', `Hub settings updated: allow_visitor_posts = ${allowed}`);
-      }
-    })
-    .catch((err) => {
-      log('error', `Failed to update hub settings: ${err}`);
-    });
-});
-
-guestbookCommentsEl.addEventListener('click', (e) => {
-  const btn = (e.target as HTMLElement).closest('.guestbook-reaction-btn');
-  if (!btn) return;
-  const card = btn.closest('.guestbook-comment-card');
-  if (!card) return;
-
-  const postId = card.getAttribute('data-post-id');
-  const emoji = btn.getAttribute('data-emoji');
-  if (!postId || !emoji) return;
-
-  api
-    .reactToPost(postId, emoji)
-    .then((res) => {
-      if (res.success) {
-        const countSpan = btn.querySelector('.reaction-count');
-        if (countSpan) {
-          countSpan.textContent = String(Number(countSpan.textContent) + 1);
-        }
-      }
-    })
-    .catch((err) => {
-      log('error', `Failed to react to post ${postId}: ${err}`);
-    });
-});
+// (renderGuestbookComments and related listeners moved to hubPanelsController)
 
 async function enterHub(owner: string) {
   if (hubTransitionInFlight) return;
@@ -1932,7 +1647,7 @@ npcShopSucoEl.addEventListener('click', () => {
 // --- updateInteraction ---------------------------------------------------------
 
 function updateInteraction() {
-  if (chatInputOpen || addPostOpen) {
+  if (chatInputOpen || hubPanelsController.isAddPostOpen) {
     hintEl.classList.add('hidden');
     return;
   }
@@ -1954,7 +1669,7 @@ function updateInteraction() {
     }
 
     // Raycast against NPCs in plaza
-    if (!nearEntranceOwner && !openNpc && !openPost) {
+    if (!nearEntranceOwner && !openNpc && !hubPanelsController.isPostOpen) {
       camera.getWorldPosition(raycastOrigin);
       camera.getWorldDirection(raycastDir);
       raycaster.set(raycastOrigin, raycastDir);
@@ -1975,7 +1690,7 @@ function updateInteraction() {
         Math.hypot(localX - HUB_EXIT_ZONE.x, localZ - HUB_EXIT_ZONE.z) < HUB_EXIT_ZONE.radius;
     }
 
-    if (!openPost && built) {
+    if (!hubPanelsController.isPostOpen && built) {
       camera.getWorldPosition(raycastOrigin);
       camera.getWorldDirection(raycastDir);
       raycaster.set(raycastOrigin, raycastDir);
@@ -1989,11 +1704,11 @@ function updateInteraction() {
     }
   }
 
-  if (openPost) {
+  if (hubPanelsController.isPostOpen) {
     hint = 'Pressione E para fechar';
   } else if (openNpc) {
     hint = 'Pressione E para fechar';
-  } else if (guestbookOpen) {
+  } else if (hubPanelsController.isGuestbookOpen) {
     hint = 'Pressione E para fechar';
   } else if (hovered) {
     hint = `Pressione E — ${hovered.label}`;
@@ -2011,20 +1726,20 @@ function updateInteraction() {
   hintEl.classList.toggle('hidden', hint === '');
 
   if (eJustPressed) {
-    if (openPost) {
-      closePostPanel();
+    if (hubPanelsController.isPostOpen) {
+      hubPanelsController.closePost();
       resumeAfterUI();
     } else if (openNpc) {
       closeNpcPanel();
       resumeAfterUI();
-    } else if (guestbookOpen) {
-      closeGuestbookPanel();
+    } else if (hubPanelsController.isGuestbookOpen) {
+      hubPanelsController.closeGuestbook();
       resumeAfterUI();
     } else if (hovered) {
       if (hovered.post.type === 'guestbook') {
-        openGuestbookPanel();
+        hubPanelsController.openGuestbook();
       } else {
-        openPostPanel(hovered.post);
+        hubPanelsController.openPost(hovered.post);
       }
     } else if (hoveredNpc) {
       openNpcPanel(hoveredNpc);
@@ -2145,7 +1860,7 @@ function animate(timestamp: number) {
     `mode=${mode}  locked=${controls.isLocked}  fps=${fps.toFixed(0)}`,
     `pos=(${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`,
     `rot yaw=${THREE.MathUtils.radToDeg(camera.rotation.y).toFixed(1)}°  pitch=${THREE.MathUtils.radToDeg(camera.rotation.x).toFixed(1)}°`,
-    `scene.children=${scene.children.length}  openPost=${openPost ? openPost.id : 'none'}`,
+    `scene.children=${scene.children.length}  openPost=${hubPanelsController.isPostOpen ? 'active' : 'none'}`,
     `connected=${connected}  sessionId=${network.sessionId || 'none'}  remotePlayers=${avatarManager.count}`,
     `enemies=${enemyManager.count}  pickups=${pickupManager.count}  dead=${combat.isDead}`,
     `hub=${currentHubOwner ?? 'none'}  myName=${myName || 'none'}`,
@@ -2159,6 +1874,21 @@ function animate(timestamp: number) {
 // permissions list are all internal to <gm-panel> / <gm-builder-tab> /
 // <gm-sound-tab> / <gm-permissions-tab> now; this wires their events to
 // game/network state (Shortcuts is pure static content, no wiring needed).
+const hubPanelsController = initHubPanelsController({
+  guestbookPanel: guestbookPanelEl,
+  postPanel: postPanelEl,
+  addPostPanel: addPostPanelEl,
+
+  getMyName: () => myName,
+  getCurrentHubOwner: () => currentHubOwner,
+  resetKeys: () => Object.keys(keys).forEach((code) => (keys[code] = false)),
+  resetVelocity: () => velocity.set(0, 0, 0),
+  releasePointerForUI,
+  resumeAfterUI,
+
+  rebuildHub: (owner) => hubManager.rebuild(owner).then(() => {}),
+});
+
 const gmController = initGmController({
   badge: gmHelpBadgeEl,
   panel: gmPanelEl,
@@ -2169,8 +1899,8 @@ const gmController = initGmController({
 
   isConnected: () => connected,
   isChatInputOpen: () => chatInputOpen,
-  isAddPostOpen: () => addPostOpen,
-  hasOpenPost: () => !!openPost,
+  isAddPostOpen: () => hubPanelsController.isAddPostOpen,
+  hasOpenPost: () => hubPanelsController.isPostOpen,
   hasOpenNpc: () => !!openNpc,
 
   resetKeys: () => Object.keys(keys).forEach((code) => (keys[code] = false)),

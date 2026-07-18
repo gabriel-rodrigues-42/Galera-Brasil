@@ -6,6 +6,10 @@ import { GmShortcutsTab } from './components/gm-shortcuts-tab';
 import { GmPermissionsTab } from './components/gm-permissions-tab';
 import { GmBadge } from './components/gm-badge';
 import { BuilderStatus } from './components/builder-status';
+import { GuestbookPanel } from './components/guestbook-panel';
+import { PostPanel } from './components/post-panel';
+import { AddPostPanel } from './components/add-post-panel';
+import { JoinOverlay } from './components/join-overlay';
 
 /** Defines every UI custom element in one place. Call once from main.ts
  * before any DOM query. See DESIGN.md §4 — keeps every component on the
@@ -19,4 +23,8 @@ export function registerUiComponents(): void {
   customElements.define('gm-permissions-tab', GmPermissionsTab);
   customElements.define('gm-badge', GmBadge);
   customElements.define('builder-status', BuilderStatus);
+  customElements.define('guestbook-panel', GuestbookPanel);
+  customElements.define('post-panel', PostPanel);
+  customElements.define('add-post-panel', AddPostPanel);
+  customElements.define('join-overlay', JoinOverlay);
 }

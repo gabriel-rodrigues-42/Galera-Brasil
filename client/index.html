@@ -23,37 +23,7 @@
   <body>
     <div id="app">
       <canvas id="scene"></canvas>
-      <div id="overlay">
-        <div class="overlay-card">
-          <p class="overlay-kicker">Praca social brasileira</p>
-          <h1>Galera Brasil</h1>
-          <p class="overlay-subtitle">
-            Entre na feira, visite hubs e parta para a batalha no lago.
-          </p>
-          <form id="join-form">
-            <label class="overlay-field" for="name-input">
-              <span class="overlay-field-label">Apelido</span>
-              <input
-                id="name-input"
-                type="text"
-                placeholder="Seu nome"
-                maxlength="24"
-                autocomplete="off"
-              />
-            </label>
-            <button type="submit">Entrar</button>
-          </form>
-          <button type="button" id="quick-play-btn" class="hidden">Jogar</button>
-          <p id="join-status"></p>
-          <div id="resume-block" class="hidden">
-            <p>Entrar na praça</p>
-          </div>
-          <p class="hint">
-            WASD para andar · Mouse para olhar · E para interagir · Enter para conversar · C para o
-            chat · Esc para pausar
-          </p>
-        </div>
-      </div>
+      <join-overlay id="overlay"></join-overlay>
       <div id="crosshair"></div>
       <div id="interact-hint" class="hidden"></div>
       <!-- Battle HUD (2.0) -->
@@ -97,48 +67,8 @@
         <p>Os mosquitos venceram dessa vez...</p>
         <p>Voltando pra praça em <span id="death-countdown">3</span>s</p>
       </div>
-      <div id="post-panel" class="hidden">
-        <div id="post-panel-content"></div>
-        <button type="button" id="post-panel-close">Fechar</button>
-        <p class="panel-hint">Esc para fechar</p>
-      </div>
-      <div id="guestbook-panel" class="hidden">
-        <h2>Mural de Visitantes</h2>
-        <div id="guestbook-comments" class="guestbook-comments-list"></div>
-        <p id="guestbook-empty-hint" class="hidden">
-          Nenhum recado ainda. Seja o primeiro a escrever!
-        </p>
-
-        <!-- Visitor message submission -->
-        <div id="guestbook-form-section">
-          <h3>Deixe um recado</h3>
-          <form id="guestbook-form" autocomplete="off">
-            <textarea
-              id="guestbook-message-input"
-              placeholder="Escreva sua mensagem aqui..."
-              maxlength="300"
-              required
-            ></textarea>
-            <div class="guestbook-form-actions">
-              <button type="submit">Enviar Recado</button>
-            </div>
-          </form>
-        </div>
-        <p id="guestbook-locked-msg" class="hidden">
-          🔒 O proprietário desativou novas postagens de visitantes.
-        </p>
-
-        <!-- Owner Settings -->
-        <div id="guestbook-settings-section" class="hidden">
-          <label class="guestbook-checkbox-label">
-            <input type="checkbox" id="guestbook-allow-toggle" />
-            <span>Permitir posts de visitantes</span>
-          </label>
-        </div>
-
-        <button type="button" id="guestbook-panel-close">Fechar</button>
-        <p class="panel-hint">Esc para fechar</p>
-      </div>
+      <post-panel id="post-panel" hidden></post-panel>
+      <guestbook-panel id="guestbook-panel" hidden></guestbook-panel>
       <div id="npc-panel" class="hidden">
         <h2 id="npc-panel-name">Nome do NPC</h2>
         <div id="npc-panel-dialogue">
@@ -191,29 +121,7 @@
         autocomplete="off"
         placeholder="Digite sua mensagem — Enter para enviar, Esc para cancelar"
       />
-      <div id="add-post-panel" class="hidden">
-        <form id="add-post-form">
-          <h2>Novo post</h2>
-          <input
-            id="post-title-input"
-            type="text"
-            placeholder="Título"
-            maxlength="60"
-            autocomplete="off"
-          />
-          <textarea
-            id="post-body-input"
-            placeholder="Texto do post"
-            maxlength="400"
-            rows="4"
-          ></textarea>
-          <div class="add-post-actions">
-            <button type="submit">Publicar</button>
-            <button type="button" id="add-post-cancel">Cancelar</button>
-          </div>
-          <p class="panel-hint">Ctrl+Enter para publicar · Esc para cancelar</p>
-        </form>
-      </div>
+      <add-post-panel id="add-post-panel" hidden></add-post-panel>
       <div id="debug-panel" class="collapsed">
         <button
           id="debug-badge"

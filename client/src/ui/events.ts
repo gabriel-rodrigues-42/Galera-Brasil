@@ -20,6 +20,13 @@ export const VOLUME_CHANGE = 'volume-change';
 export const GM_BYPASS_TOGGLE = 'gm-bypass-toggle';
 export const GM_HUB_PERMISSION_TOGGLE = 'gm-hub-permission-toggle';
 
+export const GUESTBOOK_SUBMIT = 'guestbook-submit';
+export const GUESTBOOK_REACT = 'guestbook-react';
+export const GUESTBOOK_ALLOW_TOGGLE = 'guestbook-allow-toggle';
+export const POST_SUBMIT = 'post-submit';
+export const JOIN_SUBMIT = 'join-submit';
+export const RESUME_CLICK = 'resume-click';
+
 export type EnemyKind = 'mosquito' | 'barata' | 'pombo';
 export type RespawnTarget = 'npcs' | 'trees' | 'canopies' | 'lake' | 'all';
 export type GmTab = 'builder' | 'shortcuts' | 'sound' | 'permissions';
@@ -50,4 +57,21 @@ export interface GmBypassToggleDetail {
 export interface GmHubPermissionToggleDetail {
   owner: string;
   allowed: boolean;
+}
+export interface GuestbookSubmitDetail {
+  message: string;
+}
+export interface GuestbookReactDetail {
+  postId: string;
+  emoji: string;
+}
+export interface GuestbookAllowToggleDetail {
+  allowed: boolean;
+}
+export interface PostSubmitDetail {
+  title: string;
+  body: string;
+}
+export interface JoinSubmitDetail {
+  name: string;
 }
