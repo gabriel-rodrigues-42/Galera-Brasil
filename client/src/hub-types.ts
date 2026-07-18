@@ -1,18 +1,18 @@
-export interface ImagePost {
+interface ImagePost {
   type: 'image';
   id: string;
   caption: string;
   accentColor: string;
 }
 
-export interface TextPost {
+interface TextPost {
   type: 'text';
   id: string;
   title: string;
   body: string;
 }
 
-export interface LinkPost {
+interface LinkPost {
   type: 'link';
   id: string;
   label: string;

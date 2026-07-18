@@ -46,7 +46,35 @@ db.exec(`
     z REAL NOT NULL,
     created_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS player_stats (
+    player_name TEXT PRIMARY KEY,
+    level INTEGER NOT NULL DEFAULT 1,
+    xp INTEGER NOT NULL DEFAULT 0,
+    coins INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS player_upgrades (
+    player_name TEXT PRIMARY KEY,
+    reinforced_chinelo INTEGER NOT NULL DEFAULT 0,
+    suco_count INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+  );
 `);
+
+// Lightweight migration for existing databases created before coins existed.
+const playerStatsColumns = db.prepare('PRAGMA table_info(player_stats)').all() as {
+  name: string;
+}[];
+if (!playerStatsColumns.some((c) => c.name === 'coins')) {
+  db.exec('ALTER TABLE player_stats ADD COLUMN coins INTEGER NOT NULL DEFAULT 0');
+}
+
+const playerUpgradesColumns = db.prepare('PRAGMA table_info(player_upgrades)').all() as {
+  name: string;
+}[];
+if (!playerUpgradesColumns.some((c) => c.name === 'suco_count')) {
+  db.exec('ALTER TABLE player_upgrades ADD COLUMN suco_count INTEGER NOT NULL DEFAULT 0');
+}
 
 // Pre-populate NPC content if empty
 const countRow = db.prepare('SELECT COUNT(*) as c FROM npc_content').get() as { c: number };
@@ -237,7 +265,7 @@ export function addPost(owner: string, input: NewPostInput): StoredPost | null {
 
 // --- NPC & Sticker system helpers ----------------------------------------------
 
-export interface StickerDef {
+interface StickerDef {
   id: string;
   name: string;
   emoji: string;
@@ -245,7 +273,7 @@ export interface StickerDef {
   npcType: 'robot' | 'joker' | 'romance';
 }
 
-export const STICKERS: StickerDef[] = [
+const STICKERS: StickerDef[] = [
   {
     id: 'sticker_robot_1',
     name: 'Microchip de Ouro',
@@ -392,6 +420,66 @@ export function claimNpcSticker(
     success: true,
     sticker: randomSticker,
   };
+}
+
+// --- Player battle stats (XP / level) -------------------------------------------
+
+export interface PlayerStats {
+  level: number;
+  xp: number;
+  coins: number;
+}
+
+export interface PlayerUpgrades {
+  reinforcedChinelo: boolean;
+  sucoCount: number;
+}
+
+/** Loads a player's battle stats, creating a level-1 row the first time the
+ * name is seen. Same trust model as hubs: name-keyed, no authentication. */
+export function getOrCreatePlayerStats(rawName: string): PlayerStats {
+  const name = rawName.trim().slice(0, MAX_NAME_LENGTH) || 'Visitante';
+  const row = db
+    .prepare('SELECT level, xp, coins FROM player_stats WHERE player_name = ?')
+    .get(name) as PlayerStats | undefined;
+  if (row) return row;
+
+  db.prepare(
+    'INSERT INTO player_stats (player_name, level, xp, coins, updated_at) VALUES (?, 1, 0, 0, ?)'
+  ).run(name, Date.now());
+  return { level: 1, xp: 0, coins: 0 };
+}
+
+export function savePlayerStats(rawName: string, level: number, xp: number, coins: number): void {
+  const name = rawName.trim().slice(0, MAX_NAME_LENGTH) || 'Visitante';
+  db.prepare(
+    'INSERT OR REPLACE INTO player_stats (player_name, level, xp, coins, updated_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(name, level, xp, coins, Date.now());
+}
+
+export function getOrCreatePlayerUpgrades(rawName: string): PlayerUpgrades {
+  const name = rawName.trim().slice(0, MAX_NAME_LENGTH) || 'Visitante';
+  const row = db
+    .prepare('SELECT reinforced_chinelo, suco_count FROM player_upgrades WHERE player_name = ?')
+    .get(name) as { reinforced_chinelo: number; suco_count: number } | undefined;
+  if (row) {
+    return {
+      reinforcedChinelo: row.reinforced_chinelo === 1,
+      sucoCount: Math.max(0, row.suco_count),
+    };
+  }
+
+  db.prepare(
+    'INSERT INTO player_upgrades (player_name, reinforced_chinelo, suco_count, updated_at) VALUES (?, 0, 0, ?)'
+  ).run(name, Date.now());
+  return { reinforcedChinelo: false, sucoCount: 0 };
+}
+
+export function savePlayerUpgrades(rawName: string, upgrades: PlayerUpgrades): void {
+  const name = rawName.trim().slice(0, MAX_NAME_LENGTH) || 'Visitante';
+  db.prepare(
+    'INSERT OR REPLACE INTO player_upgrades (player_name, reinforced_chinelo, suco_count, updated_at) VALUES (?, ?, ?, ?)'
+  ).run(name, upgrades.reinforcedChinelo ? 1 : 0, Math.max(0, upgrades.sucoCount), Date.now());
 }
 
 export interface PlacedObject {

@@ -18,6 +18,58 @@ interface RemoteAvatar {
   bubbleExpiresAt: number;
   targetPos: THREE.Vector3;
   targetRotY: number;
+  /** Held weapon prop (created lazily on the first attack we see). */
+  prop: THREE.Group | null;
+  propWeapon: 'vassoura' | 'chinelo' | null;
+  propReinforced: boolean;
+  /** Seconds into the swing animation; -1 while idle. */
+  attackT: number;
+}
+
+const ATTACK_SWING_DURATION = 0.35;
+
+function buildWeaponProp(weapon: 'vassoura' | 'chinelo', reinforced = false): THREE.Group {
+  const group = new THREE.Group();
+  if (weapon === 'vassoura') {
+    const handle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.02, 0.85, 8),
+      new THREE.MeshStandardMaterial({ color: 0x8a5a2f, roughness: 0.9 })
+    );
+    handle.position.y = 0.3;
+    group.add(handle);
+    const bristles = new THREE.Mesh(
+      new THREE.BoxGeometry(0.09, 0.2, 0.06),
+      new THREE.MeshStandardMaterial({ color: 0xd9b24a, roughness: 1 })
+    );
+    bristles.position.y = -0.2;
+    group.add(bristles);
+  } else {
+    const sole = new THREE.Mesh(
+      new THREE.BoxGeometry(0.13, 0.03, 0.3),
+      new THREE.MeshStandardMaterial({ color: reinforced ? 0x2450a8 : 0x2a6bd4, roughness: 0.8 })
+    );
+    group.add(sole);
+    const strap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.11, 0.015, 0.03),
+      new THREE.MeshStandardMaterial({ color: reinforced ? 0xffcf5c : 0xf4f1e8, roughness: 0.8 })
+    );
+    strap.position.set(0, 0.03, -0.05);
+    strap.rotation.x = 0.4;
+    sole.add(strap);
+  }
+  // Held at the avatar's right "hand", pointing forward-ish.
+  group.position.set(0.42, 1.05, 0.1);
+  group.rotation.set(0.4, 0, -0.3);
+  return group;
+}
+
+function disposeProp(prop: THREE.Group) {
+  prop.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) {
+      obj.geometry?.dispose();
+      (obj.material as THREE.Material)?.dispose?.();
+    }
+  });
 }
 
 /** Deterministic pastel-ish color per session so each friend reads as a
@@ -87,7 +139,36 @@ export class AvatarManager {
       bubbleExpiresAt: 0,
       targetPos: worldPos.clone(),
       targetRotY: state.rotY,
+      prop: null,
+      propWeapon: null,
+      propReinforced: false,
+      attackT: -1,
     });
+  }
+
+  /** Show this avatar swinging/throwing — triggered by the server's
+   * attack_visual broadcast. The weapon prop stays in hand afterwards. */
+  playAttack(sessionId: string, weapon: 'vassoura' | 'chinelo', reinforced = false) {
+    const avatar = this.avatars.get(sessionId);
+    if (!avatar) return;
+    if (
+      avatar.propWeapon !== weapon ||
+      (weapon === 'chinelo' && avatar.propReinforced !== reinforced)
+    ) {
+      if (avatar.prop) {
+        avatar.group.remove(avatar.prop);
+        disposeProp(avatar.prop);
+      }
+      avatar.prop = buildWeaponProp(weapon, reinforced);
+      avatar.group.add(avatar.prop);
+      avatar.propWeapon = weapon;
+      avatar.propReinforced = reinforced;
+    }
+    avatar.attackT = 0;
+  }
+
+  getPosition(sessionId: string): THREE.Vector3 | null {
+    return this.avatars.get(sessionId)?.group.position ?? null;
   }
 
   updateTarget(sessionId: string, state: RemotePlayerState) {
@@ -141,6 +222,16 @@ export class AvatarManager {
         avatar.bubbleSprite.material.map?.dispose();
         avatar.bubbleSprite.material.dispose();
         avatar.bubbleSprite = null;
+      }
+
+      if (avatar.attackT >= 0 && avatar.prop) {
+        avatar.attackT += delta;
+        const p = Math.min(1, avatar.attackT / ATTACK_SWING_DURATION);
+        avatar.prop.rotation.x = 0.4 - Math.sin(p * Math.PI) * 1.4;
+        if (p >= 1) {
+          avatar.attackT = -1;
+          avatar.prop.rotation.x = 0.4;
+        }
       }
     }
   }

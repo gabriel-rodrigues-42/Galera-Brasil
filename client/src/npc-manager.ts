@@ -2,15 +2,16 @@ import * as THREE from 'three';
 import { makeNameTagTexture } from './textures';
 
 export interface NpcDef {
-  id: 'robot' | 'joker' | 'romance';
+  id: 'robot' | 'joker' | 'romance' | 'vendor';
   displayName: string;
   position: THREE.Vector3;
 }
 
-export const NPCS: NpcDef[] = [
+const NPCS: NpcDef[] = [
   { id: 'robot', displayName: 'Robô da Net', position: new THREE.Vector3(-4, 0, 2) },
   { id: 'joker', displayName: 'Coringa do Feirão', position: new THREE.Vector3(4, 0, -1.5) },
   { id: 'romance', displayName: 'Cupido Solarpunk', position: new THREE.Vector3(0, 0, 4.5) },
+  { id: 'vendor', displayName: 'Dona Jurema da Feira', position: new THREE.Vector3(6, 0, -1.5) },
 ];
 
 export interface NpcInstance {
@@ -162,7 +163,7 @@ export class NpcManager {
           jokerHeadGroup.scale.y = 1.0 - Math.abs(bounce) * 0.06;
           jokerHeadGroup.rotation.y = time * 1.5;
         };
-      } else {
+      } else if (def.id === 'romance') {
         // --- Romance NPC visuals ---
         // Terracotta planter base
         const planter = new THREE.Mesh(
@@ -205,10 +206,78 @@ export class NpcManager {
           heart.rotation.y = time * 0.8;
           heart.rotation.x = Math.sin(time * 0.5) * 0.2;
         };
+      } else {
+        // --- Feira vendor visuals ---
+        const torso = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.24, 0.58, 6, 12),
+          new THREE.MeshStandardMaterial({ color: 0x5b8f6b, roughness: 0.75 })
+        );
+        torso.position.y = 1.0;
+        torso.castShadow = true;
+        group.add(torso);
+
+        const head = new THREE.Mesh(
+          new THREE.SphereGeometry(0.2, 14, 14),
+          new THREE.MeshStandardMaterial({ color: 0xf2cc8f, roughness: 0.8 })
+        );
+        head.position.y = 1.55;
+        head.castShadow = true;
+        group.add(head);
+
+        const hat = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.26, 0.34, 0.16, 16),
+          new THREE.MeshStandardMaterial({ color: 0xd85f2d, roughness: 0.8 })
+        );
+        hat.position.y = 1.78;
+        hat.castShadow = true;
+        group.add(hat);
+
+        const tray = new THREE.Mesh(
+          new THREE.BoxGeometry(0.7, 0.08, 0.4),
+          new THREE.MeshStandardMaterial({ color: 0x8a5a2f, roughness: 0.9 })
+        );
+        tray.position.set(0, 1.1, 0.25);
+        tray.castShadow = true;
+        group.add(tray);
+
+        const bottle = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.055, 0.045, 0.22, 10),
+          new THREE.MeshStandardMaterial({ color: 0xa7d94f, roughness: 0.5, metalness: 0.1 })
+        );
+        bottle.position.set(-0.16, 1.24, 0.25);
+        tray.add(bottle);
+
+        const slipper = new THREE.Mesh(
+          new THREE.BoxGeometry(0.16, 0.03, 0.34),
+          new THREE.MeshStandardMaterial({ color: 0x2a6bd4, roughness: 0.8 })
+        );
+        slipper.position.set(0.12, 1.16, 0.22);
+        tray.add(slipper);
+
+        const coin = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.08, 0.08, 0.02, 16),
+          new THREE.MeshStandardMaterial({ color: 0xffcf5c, metalness: 0.7, roughness: 0.3 })
+        );
+        coin.rotation.x = Math.PI / 2;
+        coin.position.set(0.03, 1.16, 0.31);
+        tray.add(coin);
+
+        interactObject = torso;
+        animateFn = (_delta, time) => {
+          torso.rotation.y = Math.sin(time * 0.9) * 0.1;
+          tray.position.y = 1.1 + Math.sin(time * 2.2) * 0.02;
+        };
       }
 
       // Add Name Tag
-      const nameColor = def.id === 'robot' ? '#00d2ff' : def.id === 'joker' ? '#ffb997' : '#ff4b72';
+      const nameColor =
+        def.id === 'robot'
+          ? '#00d2ff'
+          : def.id === 'joker'
+            ? '#ffb997'
+            : def.id === 'romance'
+              ? '#ff4b72'
+              : '#ffcf5c';
       const nameTexture = makeNameTagTexture(def.displayName, nameColor);
       const nameSprite = new THREE.Sprite(
         new THREE.SpriteMaterial({ map: nameTexture, depthTest: false })

@@ -7,6 +7,10 @@ import { log, initDebugPanel, updateStats, installGlobalErrorLogging } from './l
 import { Network } from './network';
 import { AvatarManager } from './avatars';
 import { NpcManager, type NpcDef } from './npc-manager';
+import { EnemyManager } from './enemy-manager';
+import { PickupManager } from './pickup-manager';
+import { CombatManager } from './combat';
+import { Hud } from './hud';
 import * as api from './api';
 import './style.css';
 
@@ -22,13 +26,18 @@ const panelEl = document.querySelector<HTMLDivElement>('#post-panel')!;
 const panelContentEl = document.querySelector<HTMLDivElement>('#post-panel-content')!;
 const panelCloseEl = document.querySelector<HTMLButtonElement>('#post-panel-close')!;
 const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
+const debugBadgeEl = document.querySelector<HTMLButtonElement>('#debug-badge')!;
 const debugStatsEl = document.querySelector<HTMLPreElement>('#debug-stats')!;
 const debugLogEl = document.querySelector<HTMLPreElement>('#debug-log')!;
 const joinFormEl = document.querySelector<HTMLFormElement>('#join-form')!;
 const nameInputEl = document.querySelector<HTMLInputElement>('#name-input')!;
+const quickPlayBtnEl = document.querySelector<HTMLButtonElement>('#quick-play-btn')!;
 const joinStatusEl = document.querySelector<HTMLParagraphElement>('#join-status')!;
 const resumeBlockEl = document.querySelector<HTMLDivElement>('#resume-block')!;
 const chatLogEl = document.querySelector<HTMLDivElement>('#chat-log')!;
+const chatCardEl = document.querySelector<HTMLDivElement>('#chat-card')!;
+const chatCardHintEl = document.querySelector<HTMLSpanElement>('#chat-card-hint')!;
+const chatUnreadEl = document.querySelector<HTMLSpanElement>('#chat-card-unread')!;
 const chatInputEl = document.querySelector<HTMLInputElement>('#chat-input')!;
 const addPostPanelEl = document.querySelector<HTMLDivElement>('#add-post-panel')!;
 const addPostFormEl = document.querySelector<HTMLFormElement>('#add-post-form')!;
@@ -41,10 +50,15 @@ const npcPanelEl = document.querySelector<HTMLDivElement>('#npc-panel')!;
 const npcPanelNameEl = document.querySelector<HTMLHeadingElement>('#npc-panel-name')!;
 const npcPanelTextEl = document.querySelector<HTMLParagraphElement>('#npc-panel-text')!;
 const npcPanelRewardEl = document.querySelector<HTMLDivElement>('#npc-panel-sticker-reward')!;
+const npcShopEl = document.querySelector<HTMLDivElement>('#npc-shop')!;
+const npcShopChineloEl = document.querySelector<HTMLButtonElement>('#npc-shop-chinelo')!;
+const npcShopRepelenteEl = document.querySelector<HTMLButtonElement>('#npc-shop-repelente')!;
+const npcShopSucoEl = document.querySelector<HTMLButtonElement>('#npc-shop-suco')!;
 const npcBtnActionEl = document.querySelector<HTMLButtonElement>('#npc-btn-action')!;
 const npcBtnStickerEl = document.querySelector<HTMLButtonElement>('#npc-btn-sticker')!;
 const npcPanelCloseEl = document.querySelector<HTMLButtonElement>('#npc-panel-close')!;
 const npcStickersListEl = document.querySelector<HTMLDivElement>('#npc-panel-stickers-list')!;
+const npcStickerSectionEl = document.querySelector<HTMLDivElement>('#npc-panel-stickers-section')!;
 
 // Game Master UI selectors
 const gmHelpBadgeEl = document.querySelector<HTMLDivElement>('#gm-help-badge')!;
@@ -55,6 +69,11 @@ const gmBtnTreesEl = document.querySelector<HTMLButtonElement>('#gm-btn-trees')!
 const gmBtnCanopiesEl = document.querySelector<HTMLButtonElement>('#gm-btn-canopies')!;
 const gmBtnLakeEl = document.querySelector<HTMLButtonElement>('#gm-btn-lake')!;
 const gmBtnAllEl = document.querySelector<HTMLButtonElement>('#gm-btn-all')!;
+const gmBtnSpawnMosquitoEl = document.querySelector<HTMLButtonElement>('#gm-btn-spawn-mosquito')!;
+const gmBtnSpawnBarataEl = document.querySelector<HTMLButtonElement>('#gm-btn-spawn-barata')!;
+const gmBtnSpawnPomboEl = document.querySelector<HTMLButtonElement>('#gm-btn-spawn-pombo')!;
+const gmBtnSpawnBossEl = document.querySelector<HTMLButtonElement>('#gm-btn-spawn-boss')!;
+const gmBtnClearMosquitosEl = document.querySelector<HTMLButtonElement>('#gm-btn-clear-mosquitos')!;
 
 // Builder Mode UI selectors
 const gmBtnToggleBuildEl = document.querySelector<HTMLButtonElement>('#gm-btn-toggle-build')!;
@@ -65,8 +84,52 @@ const gmPlacedListEl = document.querySelector<HTMLDivElement>('#gm-placed-list')
 
 initDebugPanel(debugLogEl, debugStatsEl);
 
+function toggleDebugPanel() {
+  debugPanelEl.classList.toggle('collapsed');
+}
+
+async function copyDebugLogToClipboard() {
+  const content = debugLogEl.textContent?.trim() || '';
+  if (!content) return;
+  try {
+    await navigator.clipboard.writeText(content);
+    log('info', 'debug log copied to clipboard (Ctrl+Shift+D)');
+  } catch {
+    // Fallback for browsers/environments where Clipboard API is unavailable.
+    const ta = document.createElement('textarea');
+    ta.value = content;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+      log('info', 'debug log copied to clipboard (fallback)');
+    } finally {
+      document.body.removeChild(ta);
+    }
+  }
+}
+
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Backquote') debugPanelEl.classList.toggle('hidden');
+  if (e.code === 'KeyD' && e.ctrlKey && e.shiftKey) {
+    e.preventDefault();
+    if (debugPanelEl.classList.contains('collapsed')) {
+      debugPanelEl.classList.remove('collapsed');
+    }
+    void copyDebugLogToClipboard();
+    return;
+  }
+
+  if (e.code !== 'Backquote' && e.key !== '~') return;
+  e.preventDefault();
+  toggleDebugPanel();
+});
+
+debugBadgeEl.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleDebugPanel();
 });
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -371,16 +434,18 @@ const lastPlazaTransform = { position: new THREE.Vector3(0, 1.7, 8), yaw: 0 };
 
 function getServerUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  // Dev mode: Vite serves the client on 5173, but the game server runs on
-  // 2567. In production the server serves the built client itself, so the
-  // websocket is same-origin — this one function covers both cases.
-  const isDev = window.location.port === '5173';
+  // In Vite dev, the client may run on any port (5173, 5174, ...), while the
+  // game server stays on 2567. In production, websocket is same-origin.
+  const isDev = import.meta.env.DEV;
   const host = isDev ? `${window.location.hostname}:2567` : window.location.host;
   return `${protocol}://${host}`;
 }
 
 const network = new Network(getServerUrl());
 const avatarManager = new AvatarManager(scene, (hubId) => hubManager.originFor(hubId));
+const enemyManager = new EnemyManager(scene);
+const pickupManager = new PickupManager(scene);
+const hud = new Hud();
 let connected = false;
 
 const MAX_CHAT_LINES = 8;
@@ -400,6 +465,11 @@ function appendChatLine(name: string, text: string, isSystem = false) {
   while (chatLogEl.children.length > MAX_CHAT_LINES) {
     chatLogEl.removeChild(chatLogEl.firstChild!);
   }
+  if (chatCompact) {
+    chatUnread += 1;
+    chatUnreadEl.textContent = String(chatUnread);
+    chatUnreadEl.classList.remove('hidden');
+  }
 }
 
 network.onPlayerAdd = (sessionId, state) => avatarManager.add(sessionId, state);
@@ -414,6 +484,33 @@ network.onHubAdded = (event) => hubManager.addFacade(event);
 network.onDisconnected = (reason) =>
   appendChatLine('', `Desconectado do servidor (${reason})`, true);
 
+// Battle: server-owned enemies mirror into the 3D scene; own stats drive the HUD.
+// The Muriçoca Rainha (2.3) rides the same enemies map — spotting her kind
+// here is what turns the big top-of-screen boss bar on and off.
+let bossEnemyId = '';
+network.onEnemyAdd = (enemyId, state) => {
+  enemyManager.add(enemyId, state);
+  if (state.kind === 'muricoca_rainha') {
+    bossEnemyId = enemyId;
+    hud.showBossBar();
+    hud.updateBossBar(state.hp, state.maxHp, state.phase);
+  }
+};
+network.onEnemyChange = (enemyId, state) => {
+  enemyManager.updateTarget(enemyId, state);
+  if (enemyId === bossEnemyId) hud.updateBossBar(state.hp, state.maxHp, state.phase);
+};
+network.onEnemyRemove = (enemyId) => {
+  enemyManager.remove(enemyId);
+  if (enemyId === bossEnemyId) {
+    bossEnemyId = '';
+    hud.hideBossBar();
+  }
+};
+network.onPickupAdd = (pickupId, state) => pickupManager.add(pickupId, state);
+network.onPickupChange = (pickupId, state) => pickupManager.updateTarget(pickupId, state);
+network.onPickupRemove = (pickupId) => pickupManager.remove(pickupId);
+
 // --- Player controls: pointer lock + WASD ---------------------------------------
 
 const controls = new PointerLockControls(camera, canvas);
@@ -427,8 +524,77 @@ const MAX_PITCH_FROM_HORIZON = THREE.MathUtils.degToRad(85);
 controls.minPolarAngle = Math.PI / 2 - MAX_PITCH_FROM_HORIZON;
 controls.maxPolarAngle = Math.PI / 2 + MAX_PITCH_FROM_HORIZON;
 
+// --- Battle system (2.0): weapons, projectiles, hit feedback --------------------
+
+// Movement velocity lives up here (rather than with the other movement
+// constants below) because the bonk knockback needs to push it.
+const velocity = new THREE.Vector3();
+
+const combat: CombatManager = new CombatManager({
+  scene,
+  camera,
+  network,
+  hud,
+  enemyManager,
+  avatarManager,
+  // Attacks share the builder-mode mouse buttons — the two guards are mutually
+  // exclusive (builder handler requires builderModeActive, this one forbids it).
+  canAttack: () =>
+    connected &&
+    controls.isLocked &&
+    !builderModeActive &&
+    mode === 'plaza' &&
+    !combat.isDead &&
+    !chatInputOpen &&
+    !addPostOpen &&
+    !gmPanelOpen &&
+    !openPost &&
+    !openNpc,
+  canSwitch: () => connected && controls.isLocked && !chatInputOpen && !addPostOpen && !gmPanelOpen,
+  velocity,
+  onRespawn: () => {
+    controls.object.position.set(0, 1.7, 8);
+    velocity.set(0, 0, 0);
+  },
+});
+
+network.onAttackVisual = (event) => combat.handleAttackVisual(event);
+network.onEnemyHit = (event) => combat.handleEnemyHit(event, performance.now() / 1000);
+network.onEnemyDied = (event) => combat.handleEnemyDied(event);
+network.onPlayerHit = (event) => combat.handlePlayerHit(event);
+network.onBonk = (event) => combat.handleBonk(event);
+network.onDied = (respawnInMs) => combat.handleDied(respawnInMs);
+network.onRespawned = () => combat.handleRespawned();
+network.onSelfChange = (state) => {
+  hud.show();
+  hud.updateSelf(state);
+  combat.handleSelfState(state);
+};
+network.onBossEvent = (event) => combat.handleBossEvent(event);
+network.onShopPurchaseResult = (event) => {
+  if (!openNpc || openNpc.id !== 'vendor') return;
+  npcPanelRewardEl.innerHTML = `${event.success ? '✅' : '❌'} ${event.message}`;
+  npcPanelRewardEl.classList.remove('hidden');
+};
+
 const SAVED_NAME_KEY = 'galera-brasil-name';
 nameInputEl.value = localStorage.getItem(SAVED_NAME_KEY) ?? '';
+
+function updateOverlayMenuState() {
+  const trimmed = nameInputEl.value.trim().slice(0, 24);
+  const shouldShowQuickPlay = !connected && trimmed.length > 0;
+  quickPlayBtnEl.classList.toggle('hidden', !shouldShowQuickPlay);
+  quickPlayBtnEl.textContent = shouldShowQuickPlay ? `Jogar como ${trimmed}` : 'Jogar';
+}
+
+updateOverlayMenuState();
+nameInputEl.addEventListener('input', () => {
+  updateOverlayMenuState();
+});
+
+quickPlayBtnEl.addEventListener('click', () => {
+  joinFormEl.requestSubmit();
+});
 
 joinFormEl.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -446,7 +612,11 @@ joinFormEl.addEventListener('submit', (e) => {
       localStorage.setItem(SAVED_NAME_KEY, name);
       myName = name;
       connected = true;
+      // Server join broadcasts go to everyone EXCEPT the joiner, and there is
+      // no chat history replay — seed a local line so the card never starts empty.
+      appendChatLine('', 'Você entrou na praça', true);
       joinFormEl.classList.add('hidden');
+      quickPlayBtnEl.classList.add('hidden');
       joinStatusEl.textContent = '';
       resumeBlockEl.classList.remove('hidden');
       gmHelpBadgeEl.classList.remove('hidden');
@@ -613,9 +783,25 @@ document.addEventListener('pointerlockerror', () => {
 // --- Proximity chat -------------------------------------------------------------
 
 let chatInputOpen = false;
+let chatCompact = false;
+let chatUnread = 0;
+
+/** C toggles the chat card between full and a compact header-only pill —
+ * never fully hidden, so announcements always have somewhere to land. */
+function setChatCompact(compact: boolean) {
+  chatCompact = compact;
+  chatCardEl.classList.toggle('compact', compact);
+  chatCardHintEl.textContent = compact ? 'C para abrir' : 'C para compactar';
+  if (!compact) {
+    chatUnread = 0;
+    chatUnreadEl.classList.add('hidden');
+  }
+}
 
 function openChatInput() {
   chatInputOpen = true;
+  // Typing implies wanting to read — expand the card if it was compacted.
+  if (chatCompact) setChatCompact(false);
   Object.keys(keys).forEach((code) => (keys[code] = false)); // don't keep sliding on stale held keys
   chatInputEl.classList.remove('hidden');
   chatInputEl.value = '';
@@ -981,8 +1167,10 @@ window.addEventListener('mousedown', (e) => {
   }
 });
 
+// Any locked state now uses right-click (builder break / chinelo quick-throw),
+// so the browser context menu must never appear while locked.
 window.addEventListener('contextmenu', (e) => {
-  if (controls.isLocked && builderModeActive) {
+  if (controls.isLocked) {
     e.preventDefault();
   }
 });
@@ -1008,6 +1196,31 @@ gmBtnLakeEl.addEventListener('click', () => {
   clearLake();
   spawnLake();
   log('info', 'GM triggered Lake & Deck respawn');
+});
+
+gmBtnSpawnMosquitoEl.addEventListener('click', () => {
+  network.sendGmSpawnEnemy('mosquito');
+  log('info', 'GM requested mosquito spawn');
+});
+
+gmBtnSpawnBarataEl.addEventListener('click', () => {
+  network.sendGmSpawnEnemy('barata');
+  log('info', 'GM requested barata spawn');
+});
+
+gmBtnSpawnPomboEl.addEventListener('click', () => {
+  network.sendGmSpawnEnemy('pombo');
+  log('info', 'GM requested pombo spawn');
+});
+
+gmBtnSpawnBossEl.addEventListener('click', () => {
+  network.sendGmSpawnBoss();
+  log('info', 'GM requested Muriçoca Rainha spawn');
+});
+
+gmBtnClearMosquitosEl.addEventListener('click', () => {
+  network.sendGmClearEnemies();
+  log('info', 'GM requested mosquito clear');
 });
 
 gmBtnAllEl.addEventListener('click', () => {
@@ -1094,6 +1307,17 @@ window.addEventListener('keydown', (e) => {
   ) {
     openAddPostForm();
   }
+  if (
+    e.code === 'KeyC' &&
+    connected &&
+    !chatInputOpen &&
+    !addPostOpen &&
+    !gmPanelOpen &&
+    !openPost &&
+    !openNpc
+  ) {
+    setChatCompact(!chatCompact);
+  }
   if (e.code === 'KeyB' && connected && !chatInputOpen && !addPostOpen && !openPost && !openNpc) {
     if (gmPanelOpen) {
       closeGmPanel();
@@ -1108,7 +1332,6 @@ window.addEventListener('keyup', (e) => (keys[e.code] = false));
 const MOVE_ACCEL = 60; // units/second^2
 const MAX_SPEED = 5; // meters/second
 const PLAZA_RADIUS = 58; // soft world boundary
-const velocity = new THREE.Vector3();
 const inputDir = new THREE.Vector3();
 
 function isDown(...codes: string[]): boolean {
@@ -1116,7 +1339,8 @@ function isDown(...codes: string[]): boolean {
 }
 
 function updateMovement(delta: number) {
-  if (openPost || chatInputOpen || addPostOpen) return; // frozen while a UI panel is open
+  // frozen while a UI panel is open or while fainted (death overlay showing)
+  if (openPost || chatInputOpen || addPostOpen || combat.isDead) return;
 
   // Damping
   velocity.x -= velocity.x * 8 * delta;
@@ -1355,22 +1579,41 @@ function openNpcPanel(npc: NpcDef) {
   npcPanelNameEl.textContent = npc.displayName;
   npcPanelRewardEl.classList.add('hidden');
   npcPanelRewardEl.textContent = '';
+  npcShopEl.classList.add('hidden');
 
   if (npc.id === 'robot') {
     npcBtnActionEl.textContent = 'Pedir Dica';
     npcPanelTextEl.textContent =
       'Olá! Eu sou o Robô da Net. Quer aprender algum atalho ou truque de computador?';
+    npcBtnActionEl.classList.remove('hidden');
+    npcBtnStickerEl.classList.remove('hidden');
+    npcStickerSectionEl.classList.remove('hidden');
+    renderStickerAlbum(npc.id);
   } else if (npc.id === 'joker') {
     npcBtnActionEl.textContent = 'Pedir Piada';
     npcPanelTextEl.textContent =
       'Olá! Eu sou o Coringa do Feirão. Preparado para dar umas risadas?';
-  } else {
+    npcBtnActionEl.classList.remove('hidden');
+    npcBtnStickerEl.classList.remove('hidden');
+    npcStickerSectionEl.classList.remove('hidden');
+    renderStickerAlbum(npc.id);
+  } else if (npc.id === 'romance') {
     npcBtnActionEl.textContent = 'Pedir Cantada / Encontro';
     npcPanelTextEl.textContent =
       'Olá! Eu sou o Cupido Solarpunk. Procurando ideias de encontros ou cantadas românticas?';
+    npcBtnActionEl.classList.remove('hidden');
+    npcBtnStickerEl.classList.remove('hidden');
+    npcStickerSectionEl.classList.remove('hidden');
+    renderStickerAlbum(npc.id);
+  } else {
+    npcPanelTextEl.textContent =
+      'Bem-vindo à feira! Tenho reforço para chinelo, repelente e suco para voltar à luta.';
+    npcBtnActionEl.classList.add('hidden');
+    npcBtnStickerEl.classList.add('hidden');
+    npcStickerSectionEl.classList.add('hidden');
+    npcShopEl.classList.remove('hidden');
   }
 
-  renderStickerAlbum(npc.id);
   npcPanelEl.classList.remove('hidden');
   velocity.set(0, 0, 0);
   releasePointerForUI();
@@ -1389,7 +1632,7 @@ npcPanelCloseEl.addEventListener('click', () => {
 });
 
 npcBtnActionEl.addEventListener('click', () => {
-  if (!openNpc) return;
+  if (!openNpc || openNpc.id === 'vendor') return;
   npcPanelRewardEl.classList.add('hidden');
 
   api
@@ -1405,7 +1648,8 @@ npcBtnActionEl.addEventListener('click', () => {
 });
 
 npcBtnStickerEl.addEventListener('click', () => {
-  if (!openNpc || !myName) return;
+  if (!openNpc || !myName || openNpc.id === 'vendor') return;
+  const npcId = openNpc.id;
 
   api
     .claimNpcSticker(myName, openNpc.id)
@@ -1414,7 +1658,7 @@ npcBtnStickerEl.addEventListener('click', () => {
         if (!stickersCollected.includes(res.sticker.id)) {
           stickersCollected.push(res.sticker.id);
         }
-        renderStickerAlbum(openNpc!.id);
+        renderStickerAlbum(npcId);
         npcPanelRewardEl.innerHTML = `🎉 <strong>Sticker Desbloqueado!</strong> Você ganhou o sticker <strong>${res.sticker.emoji} ${res.sticker.name}</strong>!<br><span style="font-size:0.85rem">${res.sticker.description}</span>`;
         npcPanelRewardEl.classList.remove('hidden');
         log('info', `Claimed sticker ${res.sticker.id}`);
@@ -1435,6 +1679,21 @@ npcBtnStickerEl.addEventListener('click', () => {
       npcPanelRewardEl.innerHTML = `❌ Erro de conexão com o servidor.`;
       npcPanelRewardEl.classList.remove('hidden');
     });
+});
+
+npcShopChineloEl.addEventListener('click', () => {
+  if (!openNpc || openNpc.id !== 'vendor') return;
+  network.sendShopPurchase('chinelo_reforcado');
+});
+
+npcShopRepelenteEl.addEventListener('click', () => {
+  if (!openNpc || openNpc.id !== 'vendor') return;
+  network.sendShopPurchase('repelente');
+});
+
+npcShopSucoEl.addEventListener('click', () => {
+  if (!openNpc || openNpc.id !== 'vendor') return;
+  network.sendShopPurchase('suco_laranja');
 });
 
 // --- updateInteraction ---------------------------------------------------------
@@ -1636,6 +1895,9 @@ function animate(timestamp: number) {
 
   avatarManager.update(delta, timestamp / 1000);
   npcManager.update(delta, timestamp / 1000);
+  enemyManager.update(delta, timestamp / 1000);
+  pickupManager.update(delta, timestamp / 1000);
+  combat.update(delta, timestamp / 1000);
 
   updateStats([
     `mode=${mode}  locked=${controls.isLocked}  fps=${fps.toFixed(0)}`,
@@ -1643,6 +1905,7 @@ function animate(timestamp: number) {
     `rot yaw=${THREE.MathUtils.radToDeg(camera.rotation.y).toFixed(1)}°  pitch=${THREE.MathUtils.radToDeg(camera.rotation.x).toFixed(1)}°`,
     `scene.children=${scene.children.length}  openPost=${openPost ? openPost.id : 'none'}`,
     `connected=${connected}  sessionId=${network.sessionId || 'none'}  remotePlayers=${avatarManager.count}`,
+    `enemies=${enemyManager.count}  pickups=${pickupManager.count}  dead=${combat.isDead}`,
     `hub=${currentHubOwner ?? 'none'}  myName=${myName || 'none'}`,
   ]);
 

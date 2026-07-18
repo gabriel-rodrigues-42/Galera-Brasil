@@ -16,10 +16,9 @@ export type NewPostInput =
   | { type: 'link'; label: string; url: string; description: string };
 
 function getApiBase(): string {
-  // Dev mode: Vite serves the client on 5173, but the game server (and its
-  // REST API) runs on 2567. In production the server serves the client
-  // itself, so relative paths already hit the right place.
-  const isDev = window.location.port === '5173';
+  // In Vite dev, the app can run on any free port (not just 5173), while the
+  // game server + REST API stay on 2567. In production, same-origin is correct.
+  const isDev = import.meta.env.DEV;
   return isDev ? `${window.location.protocol}//${window.location.hostname}:2567` : '';
 }
 
@@ -57,7 +56,7 @@ export interface NpcDialogueResponse {
   content: string;
 }
 
-export interface StickerDef {
+interface StickerDef {
   id: string;
   name: string;
   emoji: string;

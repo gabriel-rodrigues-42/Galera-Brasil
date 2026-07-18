@@ -10,28 +10,82 @@
     <div id="app">
       <canvas id="scene"></canvas>
       <div id="overlay">
-        <h1>Galera Brasil</h1>
-        <form id="join-form">
-          <input
-            id="name-input"
-            type="text"
-            placeholder="Seu nome"
-            maxlength="24"
-            autocomplete="off"
-          />
-          <button type="submit">Entrar</button>
-        </form>
-        <p id="join-status"></p>
-        <div id="resume-block" class="hidden">
-          <p>Clique para continuar</p>
+        <div class="overlay-card">
+          <p class="overlay-kicker">Praca social brasileira</p>
+          <h1>Galera Brasil</h1>
+          <p class="overlay-subtitle">
+            Entre na feira, visite hubs e parta para a batalha no lago.
+          </p>
+          <form id="join-form">
+            <label class="overlay-field" for="name-input">
+              <span class="overlay-field-label">Apelido</span>
+              <input
+                id="name-input"
+                type="text"
+                placeholder="Seu nome"
+                maxlength="24"
+                autocomplete="off"
+              />
+            </label>
+            <button type="submit">Entrar</button>
+          </form>
+          <button type="button" id="quick-play-btn" class="hidden">Jogar</button>
+          <p id="join-status"></p>
+          <div id="resume-block" class="hidden">
+            <p>Entrar na praça</p>
+          </div>
+          <p class="hint">
+            WASD para andar · Mouse para olhar · E para interagir · Enter para conversar · C para o
+            chat · Esc para pausar
+          </p>
         </div>
-        <p class="hint">
-          WASD para andar · Mouse para olhar · E para interagir · Enter para conversar · Esc para
-          pausar
-        </p>
       </div>
       <div id="crosshair"></div>
       <div id="interact-hint" class="hidden"></div>
+      <!-- Battle HUD (2.0) -->
+      <div id="hud" class="hidden">
+        <div id="hud-shield" class="hud-bar shield hidden">
+          <div id="hud-shield-fill" class="hud-bar-fill"></div>
+          <span id="hud-shield-text" class="hud-bar-text">Shield 0/0</span>
+        </div>
+        <div class="hud-bar health">
+          <div id="hud-health-fill" class="hud-bar-fill"></div>
+          <span id="hud-health-text" class="hud-bar-text">Vida 100/100</span>
+        </div>
+        <div class="hud-bar xp">
+          <div id="hud-xp-fill" class="hud-bar-fill"></div>
+          <span id="hud-xp-text" class="hud-bar-text">Nível 1 — 0/40 XP</span>
+        </div>
+        <div id="hud-coins-text">Moedas 0</div>
+      </div>
+      <div id="hotbar" class="hidden">
+        <div id="hotbar-slot-vassoura" class="hotbar-slot active">
+          <span class="hotbar-key">1</span>
+          <span class="hotbar-icon">🧹</span>
+          <span class="hotbar-label">Vassoura</span>
+        </div>
+        <div id="hotbar-slot-chinelo" class="hotbar-slot">
+          <span class="hotbar-key">2</span>
+          <span class="hotbar-icon">🩴</span>
+          <span class="hotbar-label">Chinelo</span>
+        </div>
+        <div id="hotbar-slot-suco" class="hotbar-slot consumable">
+          <span class="hotbar-key">3</span>
+          <span class="hotbar-icon">🍊</span>
+          <span id="hotbar-suco-label" class="hotbar-label">Suco x0</span>
+        </div>
+      </div>
+      <div id="boss-bar" class="hidden">
+        <div id="boss-bar-fill"></div>
+        <span id="boss-bar-text">👑 Muriçoca Rainha</span>
+      </div>
+      <div id="hud-floats"></div>
+      <div id="damage-vignette"></div>
+      <div id="death-overlay" class="hidden">
+        <h2>😵 Você desmaiou!</h2>
+        <p>Os mosquitos venceram dessa vez...</p>
+        <p>Voltando pra praça em <span id="death-countdown">3</span>s</p>
+      </div>
       <div id="post-panel" class="hidden">
         <div id="post-panel-content"></div>
         <button type="button" id="post-panel-close">Fechar</button>
@@ -43,6 +97,26 @@
           <p id="npc-panel-text">Carregando...</p>
         </div>
         <div id="npc-panel-sticker-reward" class="hidden"></div>
+        <div id="npc-shop" class="hidden">
+          <h3>Loja da Feira</h3>
+          <div class="npc-shop-grid">
+            <button type="button" id="npc-shop-chinelo" class="npc-shop-item">
+              <span class="npc-shop-title">🩴 Chinelo Reforçado</span>
+              <span class="npc-shop-desc">visual dourado e +dano no arremesso</span>
+              <span class="npc-shop-price">45 moedas</span>
+            </button>
+            <button type="button" id="npc-shop-repelente" class="npc-shop-item">
+              <span class="npc-shop-title">🧴 Repelente</span>
+              <span class="npc-shop-desc">adiciona uma barra de shield contra picadas</span>
+              <span class="npc-shop-price">20 moedas</span>
+            </button>
+            <button type="button" id="npc-shop-suco" class="npc-shop-item">
+              <span class="npc-shop-title">🍊 Suco de Laranja</span>
+              <span class="npc-shop-desc">guarda 1 carga para usar na tecla 3</span>
+              <span class="npc-shop-price">12 moedas</span>
+            </button>
+          </div>
+        </div>
         <div class="npc-panel-actions">
           <button type="button" id="npc-btn-action">Interagir</button>
           <button type="button" id="npc-btn-sticker">Reivindicar Sticker</button>
@@ -54,7 +128,13 @@
         </div>
         <p class="panel-hint">Esc para fechar</p>
       </div>
-      <div id="chat-log"></div>
+      <div id="chat-card">
+        <div id="chat-card-header">
+          <span>💬 Chat da Praça <span id="chat-card-unread" class="hidden">0</span></span>
+          <span id="chat-card-hint" class="chat-card-hint">C para compactar</span>
+        </div>
+        <div id="chat-log"></div>
+      </div>
       <input
         id="chat-input"
         class="hidden"
@@ -86,7 +166,14 @@
           <p class="panel-hint">Ctrl+Enter para publicar · Esc para cancelar</p>
         </form>
       </div>
-      <div id="debug-panel">
+      <div id="debug-panel" class="collapsed">
+        <button
+          id="debug-badge"
+          type="button"
+          title="Atalho: ~ para abrir/fechar · Ctrl+Shift+D para copiar log"
+        >
+          DEBUG (~)
+        </button>
         <div class="debug-title">DEBUG (~ para esconder)</div>
         <pre id="debug-stats"></pre>
         <pre id="debug-log"></pre>
@@ -117,6 +204,25 @@
             </button>
             <button type="button" id="gm-btn-all" class="gm-action-btn primary">
               <span class="btn-icon">🔄</span> Respawnar Tudo
+            </button>
+          </div>
+          <!-- Battle section -->
+          <div class="gm-section">
+            <h3>Batalha</h3>
+            <button type="button" id="gm-btn-spawn-mosquito" class="gm-action-btn">
+              <span class="btn-icon">🦟</span> Invocar Mosquito
+            </button>
+            <button type="button" id="gm-btn-spawn-barata" class="gm-action-btn">
+              <span class="btn-icon">🪳</span> Invocar Barata
+            </button>
+            <button type="button" id="gm-btn-spawn-pombo" class="gm-action-btn">
+              <span class="btn-icon">🕊️</span> Invocar Pombo
+            </button>
+            <button type="button" id="gm-btn-spawn-boss" class="gm-action-btn">
+              <span class="btn-icon">👑</span> Invocar Muriçoca Rainha
+            </button>
+            <button type="button" id="gm-btn-clear-mosquitos" class="gm-action-btn">
+              <span class="btn-icon">🧹</span> Limpar Inimigos
             </button>
           </div>
           <!-- Builder Mode settings -->
