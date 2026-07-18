@@ -50,7 +50,11 @@ app.get('/api/hubs/:owner', (req, res) => {
 });
 
 app.post('/api/hubs/:owner/claim', (req, res) => {
-  res.json(getOrCreateHub(req.params.owner));
+  const owner = req.params.owner;
+  if (owner.toLowerCase().startsWith('bot')) {
+    return res.status(400).json({ error: 'bots cannot claim hubs' });
+  }
+  res.json(getOrCreateHub(owner));
 });
 
 app.post('/api/hubs/:owner/posts', (req, res) => {

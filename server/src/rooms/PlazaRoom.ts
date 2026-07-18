@@ -162,10 +162,13 @@ export class PlazaRoom extends Room<PlazaState> {
 
     // First-time visitors get a hub of their own — broadcast it so everyone
     // already in the praça sees the new facade appear without reloading.
-    const isNewHub = !getHub(player.name);
-    const hub = getOrCreateHub(player.name);
-    if (isNewHub) {
-      this.broadcast('hub_added', { owner: hub.owner, tag: hub.tag, slot: hub.slot });
+    const isBot = player.name.toLowerCase().startsWith('bot');
+    if (!isBot) {
+      const isNewHub = !getHub(player.name);
+      const hub = getOrCreateHub(player.name);
+      if (isNewHub) {
+        this.broadcast('hub_added', { owner: hub.owner, tag: hub.tag, slot: hub.slot });
+      }
     }
 
     this.broadcast('system', { text: `${player.name} entrou na praça` }, { except: client });

@@ -83,6 +83,17 @@ if (!hubsColumns.some((c) => c.name === 'allow_visitor_posts')) {
   db.exec('ALTER TABLE hubs ADD COLUMN allow_visitor_posts INTEGER NOT NULL DEFAULT 1');
 }
 
+// Clean up all dynamically generated bot hubs and their associated posts on startup
+db.prepare("DELETE FROM hubs WHERE LOWER(owner) LIKE 'bot%'").run();
+db.prepare("DELETE FROM posts WHERE LOWER(owner) LIKE 'bot%'").run();
+
+// Re-sequence slots to avoid gaps and overlaps
+const allHubs = db.prepare('SELECT owner FROM hubs ORDER BY slot ASC').all() as { owner: string }[];
+const updateSlot = db.prepare('UPDATE hubs SET slot = ? WHERE owner = ?');
+allHubs.forEach((hub, index) => {
+  updateSlot.run(index, hub.owner);
+});
+
 // Pre-populate NPC content if empty
 const countRow = db.prepare('SELECT COUNT(*) as c FROM npc_content').get() as { c: number };
 if (countRow.c === 0) {
