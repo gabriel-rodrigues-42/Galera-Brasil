@@ -9,6 +9,7 @@ import { BuilderStatus } from './components/builder-status';
 import { GuestbookPanel } from './components/guestbook-panel';
 import { NpcPanel } from './components/npc-panel';
 import { BattleHud } from './components/battle-hud';
+import { ChatBox } from './components/chat-box';
 import { PostPanel } from './components/post-panel';
 import { AddPostPanel } from './components/add-post-panel';
 import { JoinOverlay } from './components/join-overlay';
@@ -36,6 +37,7 @@ export function registerUiComponents(): void {
   customElements.define('guestbook-panel', GuestbookPanel);
   customElements.define('npc-panel', NpcPanel);
   customElements.define('battle-hud', BattleHud);
+  customElements.define('chat-box', ChatBox);
   customElements.define('post-panel', PostPanel);
   customElements.define('add-post-panel', AddPostPanel);
   customElements.define('join-overlay', JoinOverlay);

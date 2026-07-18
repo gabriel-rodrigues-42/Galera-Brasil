@@ -33,6 +33,9 @@ export const NPC_ACTION = 'npc-action';
 export const NPC_CLAIM_STICKER = 'npc-claim-sticker';
 export const NPC_SHOP_BUY = 'npc-shop-buy';
 
+export const CHAT_SEND = 'chat-send';
+export const CHAT_INPUT_CLOSED = 'chat-input-closed';
+
 export type EnemyKind = 'mosquito' | 'barata' | 'pombo';
 export type RespawnTarget = 'npcs' | 'trees' | 'canopies' | 'lake' | 'all';
 export type GmTab = 'builder' | 'shortcuts' | 'sound' | 'permissions';
@@ -83,4 +86,7 @@ export interface JoinSubmitDetail {
 }
 export interface NpcShopBuyDetail {
   item: string;
+}
+export interface ChatSendDetail {
+  text: string;
 }

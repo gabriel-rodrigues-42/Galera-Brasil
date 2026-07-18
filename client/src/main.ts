@@ -23,12 +23,14 @@ import { initHubPanelsController } from './ui/controllers/hub-panels-controller'
 import { initJoinController } from './ui/controllers/join-controller';
 import { initGameController } from './ui/controllers/game-controller';
 import { initNpcPanelController } from './ui/controllers/npc-panel-controller';
+import { initChatController } from './ui/controllers/chat-controller';
 import type { JoinOverlay } from './ui/components/join-overlay';
 import type { GuestbookPanel } from './ui/components/guestbook-panel';
 import type { PostPanel } from './ui/components/post-panel';
 import type { AddPostPanel } from './ui/components/add-post-panel';
 import type { NpcPanel } from './ui/components/npc-panel';
 import type { BattleHud } from './ui/components/battle-hud';
+import type { ChatBox } from './ui/components/chat-box';
 import type { GameTimerHud } from './ui/components/game-timer-hud';
 import type { GameQuestGuide } from './ui/components/game-quest-guide';
 import type { GameAssemblyOverlay } from './ui/components/game-assembly-overlay';
@@ -62,11 +64,7 @@ const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
 const debugBadgeEl = document.querySelector<HTMLButtonElement>('#debug-badge')!;
 const debugStatsEl = document.querySelector<HTMLPreElement>('#debug-stats')!;
 const debugLogEl = document.querySelector<HTMLPreElement>('#debug-log')!;
-const chatLogEl = document.querySelector<HTMLDivElement>('#chat-log')!;
-const chatCardEl = document.querySelector<HTMLDivElement>('#chat-card')!;
-const chatCardHintEl = document.querySelector<HTMLSpanElement>('#chat-card-hint')!;
-const chatUnreadEl = document.querySelector<HTMLSpanElement>('#chat-card-unread')!;
-const chatInputEl = document.querySelector<HTMLInputElement>('#chat-input')!;
+const chatBoxEl = document.querySelector<ChatBox>('#chat-box')!;
 
 const npcPanelEl = document.querySelector<NpcPanel>('#npc-panel')!;
 
@@ -567,41 +565,17 @@ const pickupManager = new PickupManager(scene);
 const hud = document.querySelector<BattleHud>('#battle-hud')!;
 let connected = false;
 
-const MAX_CHAT_LINES = 8;
-function appendChatLine(name: string, text: string, isSystem = false) {
-  const line = document.createElement('div');
-  line.className = isSystem ? 'chat-line system' : 'chat-line';
-  if (isSystem) {
-    line.textContent = text;
-  } else {
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'chat-name';
-    nameSpan.textContent = `${name}: `;
-    line.appendChild(nameSpan);
-    line.appendChild(document.createTextNode(text));
-  }
-  chatLogEl.appendChild(line);
-  while (chatLogEl.children.length > MAX_CHAT_LINES) {
-    chatLogEl.removeChild(chatLogEl.firstChild!);
-  }
-  if (chatCompact) {
-    chatUnread += 1;
-    chatUnreadEl.textContent = String(chatUnread);
-    chatUnreadEl.classList.remove('hidden');
-  }
-}
-
 network.onPlayerAdd = (sessionId, state) => avatarManager.add(sessionId, state);
 network.onPlayerChange = (sessionId, state) => avatarManager.updateTarget(sessionId, state);
 network.onPlayerRemove = (sessionId) => avatarManager.remove(sessionId);
 network.onChat = (event) => {
-  appendChatLine(event.name, event.text);
+  chatBoxEl.appendLine(event.name, event.text);
   avatarManager.showChatBubble(event.sessionId, event.text, performance.now() / 1000);
 };
-network.onSystem = (text) => appendChatLine('', text, true);
+network.onSystem = (text) => chatBoxEl.appendLine('', text, true);
 network.onHubAdded = (event) => hubManager.addFacade(event);
 network.onDisconnected = (reason) =>
-  appendChatLine('', `Desconectado do servidor (${reason})`, true);
+  chatBoxEl.appendLine('', `Desconectado do servidor (${reason})`, true);
 
 // Battle: server-owned enemies mirror into the 3D scene; own stats drive the HUD.
 // The Muriçoca Rainha (2.3) rides the same enemies map — spotting her kind
@@ -719,7 +693,7 @@ const combat: CombatManager = new CombatManager({
     !builderModeActive &&
     mode === 'plaza' &&
     !combat.isDead &&
-    !chatInputOpen &&
+    !chatController.isInputOpen &&
     !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen &&
     !hubPanelsController.isPostOpen &&
@@ -728,7 +702,7 @@ const combat: CombatManager = new CombatManager({
   canSwitch: () =>
     connected &&
     controls.isLocked &&
-    !chatInputOpen &&
+    !chatController.isInputOpen &&
     !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen &&
     !network.room?.state.players.get(network.sessionId)?.isGhost,
@@ -767,7 +741,7 @@ const joinController = initJoinController({
   setConnected: (val) => {
     connected = val;
   },
-  appendSystemChatLine: (text) => appendChatLine('', text, true),
+  appendSystemChatLine: (text) => chatBoxEl.appendLine('', text, true),
   requestLock,
   onJoined: () => {
     gmHelpBadgeEl.hidden = false;
@@ -847,7 +821,7 @@ const gameController = initGameController({
   assemblyOverlay: assemblyEl,
   blackoutVignette: blackoutViggnetteEl,
   network,
-  announce: (text) => appendChatLine('', text, true),
+  announce: (text) => chatBoxEl.appendLine('', text, true),
   releasePointer: () => releasePointerForUI(),
   resumeGame: () => resumeAfterUI(),
 });
@@ -935,7 +909,7 @@ controls.addEventListener('unlock', () => {
   hintEl.classList.add('hidden');
   hubPanelsController.closePost();
   npcPanelController.close();
-  closeChatInput();
+  chatController.closeInput();
   hubPanelsController.closeAddPost();
   log('info', 'pointer lock RELEASED');
 });
@@ -945,52 +919,7 @@ document.addEventListener('pointerlockerror', () => {
   log('error', 'pointerlockerror: browser refused the pointer lock request');
 });
 
-// --- Proximity chat -------------------------------------------------------------
-
-let chatInputOpen = false;
-let chatCompact = false;
-let chatUnread = 0;
-
-/** C toggles the chat card between full and a compact header-only pill —
- * never fully hidden, so announcements always have somewhere to land. */
-function setChatCompact(compact: boolean) {
-  chatCompact = compact;
-  chatCardEl.classList.toggle('compact', compact);
-  chatCardHintEl.textContent = compact ? 'C para abrir' : 'C para compactar';
-  if (!compact) {
-    chatUnread = 0;
-    chatUnreadEl.classList.add('hidden');
-  }
-}
-
-function openChatInput() {
-  chatInputOpen = true;
-  // Typing implies wanting to read — expand the card if it was compacted.
-  if (chatCompact) setChatCompact(false);
-  Object.keys(keys).forEach((code) => (keys[code] = false)); // don't keep sliding on stale held keys
-  chatInputEl.classList.remove('hidden');
-  chatInputEl.value = '';
-  chatInputEl.focus();
-}
-
-function closeChatInput() {
-  chatInputOpen = false;
-  chatInputEl.classList.add('hidden');
-  chatInputEl.blur();
-}
-
-// stopPropagation keeps every keystroke typed here from also reaching the
-// window-level game-input listener below (movement keys, E-to-interact, etc).
-chatInputEl.addEventListener('keydown', (e) => {
-  e.stopPropagation();
-  if (e.code === 'Enter') {
-    const text = chatInputEl.value.trim();
-    if (text) network.sendChat(text);
-    closeChatInput();
-  } else if (e.code === 'Escape') {
-    closeChatInput();
-  }
-});
+// --- Proximity chat (component + chatController wiring below) ------------------
 
 // --- Add-post form: only usable inside your own hub -----------------------------
 
@@ -1395,16 +1324,16 @@ window.addEventListener('keydown', (e) => {
     e.code === 'Enter' &&
     controls.isLocked &&
     !hubPanelsController.isPostOpen &&
-    !chatInputOpen &&
+    !chatController.isInputOpen &&
     !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen
   )
-    openChatInput();
+    chatController.openInput();
   if (
     e.code === 'KeyN' &&
     controls.isLocked &&
     !hubPanelsController.isPostOpen &&
-    !chatInputOpen &&
+    !chatController.isInputOpen &&
     !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen &&
     mode === 'hub' &&
@@ -1415,18 +1344,18 @@ window.addEventListener('keydown', (e) => {
   if (
     e.code === 'KeyC' &&
     connected &&
-    !chatInputOpen &&
+    !chatController.isInputOpen &&
     !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen &&
     !hubPanelsController.isPostOpen &&
     !npcPanelController.isOpen
   ) {
-    setChatCompact(!chatCompact);
+    chatController.toggleCompact();
   }
   if (
     e.code === 'KeyB' &&
     connected &&
-    !chatInputOpen &&
+    !chatController.isInputOpen &&
     !hubPanelsController.isAddPostOpen &&
     !hubPanelsController.isPostOpen &&
     !npcPanelController.isOpen
@@ -1454,7 +1383,7 @@ function updateMovement(delta: number) {
   // frozen while a UI panel is open or while fainted (death overlay showing)
   if (
     hubPanelsController.isPostOpen ||
-    chatInputOpen ||
+    chatController.isInputOpen ||
     hubPanelsController.isAddPostOpen ||
     combat.isDead
   )
@@ -1604,7 +1533,7 @@ function exitHub() {
 // --- updateInteraction ---------------------------------------------------------
 
 function updateInteraction() {
-  if (chatInputOpen || hubPanelsController.isAddPostOpen) {
+  if (chatController.isInputOpen || hubPanelsController.isAddPostOpen) {
     hintEl.classList.add('hidden');
     return;
   }
@@ -1954,6 +1883,12 @@ const npcPanelController = initNpcPanelController({
   resumeAfterUI,
 });
 
+const chatController = initChatController({
+  chatBox: chatBoxEl,
+  network,
+  resetKeys: () => Object.keys(keys).forEach((code) => (keys[code] = false)),
+});
+
 const gmController = initGmController({
   badge: gmHelpBadgeEl,
   panel: gmPanelEl,
@@ -1963,7 +1898,7 @@ const gmController = initGmController({
   builderStatus: builderStatusEl,
 
   isConnected: () => connected,
-  isChatInputOpen: () => chatInputOpen,
+  isChatInputOpen: () => chatController.isInputOpen,
   isAddPostOpen: () => hubPanelsController.isAddPostOpen,
   hasOpenPost: () => hubPanelsController.isPostOpen,
   hasOpenNpc: () => npcPanelController.isOpen,

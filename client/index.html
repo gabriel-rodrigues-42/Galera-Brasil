@@ -35,21 +35,7 @@
       <post-panel id="post-panel" hidden></post-panel>
       <guestbook-panel id="guestbook-panel" hidden></guestbook-panel>
       <npc-panel id="npc-panel" hidden></npc-panel>
-      <div id="chat-card">
-        <div id="chat-card-header">
-          <span>💬 Chat da Praça <span id="chat-card-unread" class="hidden">0</span></span>
-          <span id="chat-card-hint" class="chat-card-hint">C para compactar</span>
-        </div>
-        <div id="chat-log"></div>
-      </div>
-      <input
-        id="chat-input"
-        class="hidden"
-        type="text"
-        maxlength="200"
-        autocomplete="off"
-        placeholder="Digite sua mensagem — Enter para enviar, Esc para cancelar"
-      />
+      <chat-box id="chat-box"></chat-box>
       <add-post-panel id="add-post-panel" hidden></add-post-panel>
       <div id="debug-panel" class="collapsed">
         <button

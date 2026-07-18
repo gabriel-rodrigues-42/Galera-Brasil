@@ -102,12 +102,14 @@ Deletions across Phase 1 (final tally): `#gm-panel` block in index.html (~330 li
 
 ☑ Verified: join overlay correctly displays on load, pre-fills name, locks/unlocks mouse controls, enters properly, and handles Esc/resume and cooldown messaging.
 
-## Phase 6 — Chat ⬜
+## Phase 6 — Chat ✅
 
-- `<chat-box>`: log (max 8 lines, rendered via `textContent`), compact mode + unread pill, **and the input** (internal, hidden by default). Methods `appendLine(name, text, isSystem)`, `setCompact(bool)`, `openInput()/closeInput()`; events `chat-send {text}`, `chat-input-closed`. Internal `keydown` does `stopPropagation()` (preserves the main.ts:873 guarantee); Enter/Esc handled inside; controller syncs `chatInputOpen` in `ui-state`. The stale held-keys reset stays in main.ts's open path.
-- Delete: chat CSS (incl. compact block); index.html chat block.
+- [x] `<chat-box>`: log (max 8 lines, rendered via `textContent`), compact mode + unread pill, **and the input** (internal, hidden by default). Methods `appendLine(name, text, isSystem)`, `setCompact(bool)`, `openInput()/closeInput()`; events `chat-send {text}`, `chat-input-closed`. Internal `keydown` does `stopPropagation()` (preserves the old main.ts guarantee); Enter/Esc handled inside.
+- [x] Deviation from the original slice: `ui-state.ts` was never created in Phase 1 (per that phase's own deviation note) and no controller in this codebase uses one — every other controller (`hub-panels-controller`, `npc-panel-controller`, `gm-controller`) tracks its own state via local closure variables exposed as getters, so `chat-controller.ts` follows that same established pattern (`isInputOpen`/`isCompact` getters) instead of a shared state module that doesn't exist.
+- [x] New `client/src/ui/controllers/chat-controller.ts`: wires `chat-send` → `network.sendChat`, tracks `isInputOpen`/`isCompact`, exposes `openInput()/closeInput()/toggleCompact()`. `appendLine` has no controller-side logic (pure passthrough), so main.ts calls `chatBoxEl.appendLine(...)` directly wherever it used to call the old module-level `appendChatLine()` — matching how `hud.show()` etc. are called directly on the queried `<battle-hud>` element without a wrapper. The stale held-keys reset (`resetKeys()`) stays wired through the controller's `openInput()`.
+- [x] Delete: chat CSS (incl. compact block, ~100 lines); index.html chat-card + chat-input block collapsed to `<chat-box id="chat-box"></chat-box>`.
 
-☑ Verify: Enter opens input; typing WASD doesn't move the player; Enter sends (second client sees it + bubble); Esc cancels; C compacts → unread badge counts, C expands → clears; system join/leave lines styled.
+☑ Verified live in the browser (join, then drove the real component + dispatched real DOM keydown events so the internal listeners execute unmocked): `appendLine()` renders system/player lines correctly; `setCompact(true)` collapses the log and accumulates the unread badge, `setCompact(false)` clears it; `openInput()` shows the input, a real `Enter` keydown fires `chat-send {text}` then `chat-input-closed` in order and hides the input; a real `Escape` keydown fires only `chat-input-closed` (no send); a `KeyW` keydown dispatched at the input never reaches the window-level movement listener (`stopPropagation` confirmed via a global listener count). Server round-trip confirmed with a bot: `sendChat` messages echo back correctly. `pnpm typecheck && pnpm lint && pnpm knip && pnpm build` all clean (CSS bundle now 3.92kB, down from 9.24kB at the start of this refactor).
 
 ## Phase 7 — Small bits + final cleanup ⬜
 
