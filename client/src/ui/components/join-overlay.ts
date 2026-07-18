@@ -81,13 +81,6 @@ sheet.replaceSync(`
     color: var(--color-text-secondary);
   }
 
-  .resume-btn {
-    width: 100%;
-    font-size: var(--text-md);
-    padding: var(--space-4) var(--space-5);
-    border-radius: var(--border-radius-md);
-  }
-
   .tips-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -146,7 +139,7 @@ export class JoinOverlay extends HTMLElement {
   private nameInputEl!: HTMLInputElement;
   private enterBtnEl!: HTMLButtonElement;
   private statusEl!: HTMLParagraphElement;
-  private resumeBtnEl!: HTMLButtonElement;
+  private isConnectedState = false;
 
   constructor() {
     super();
@@ -171,7 +164,6 @@ export class JoinOverlay extends HTMLElement {
             <button type="submit" class="primary enter-btn">Entrar</button>
           </div>
         </form>
-        <button type="button" class="resume-btn primary hidden">Entrar na praça</button>
         <p class="status-msg"></p>
         
         <div class="tips-grid">
@@ -211,7 +203,6 @@ export class JoinOverlay extends HTMLElement {
     this.nameInputEl = this.shadowRoot!.querySelector('.name-input')!;
     this.enterBtnEl = this.shadowRoot!.querySelector('.enter-btn')!;
     this.statusEl = this.shadowRoot!.querySelector('.status-msg')!;
-    this.resumeBtnEl = this.shadowRoot!.querySelector('.resume-btn')!;
 
     // Block keystrokes from leaking to game
     this.nameInputEl.addEventListener('keydown', (e) => {
@@ -220,6 +211,10 @@ export class JoinOverlay extends HTMLElement {
 
     this.formEl.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (this.isConnectedState) {
+        this.dispatchEvent(new CustomEvent(RESUME_CLICK, { bubbles: true, composed: true }));
+        return;
+      }
       const name = this.nameInputEl.value.trim().slice(0, 24);
       if (!name) return;
       this.dispatchEvent(
@@ -231,8 +226,11 @@ export class JoinOverlay extends HTMLElement {
       );
     });
 
-    this.resumeBtnEl.addEventListener('click', () => {
-      this.dispatchEvent(new CustomEvent(RESUME_CLICK, { bubbles: true, composed: true }));
+    // Clicking on backdrop (host) while connected resumes game
+    this.addEventListener('click', (e) => {
+      if (this.isConnectedState && e.target === this) {
+        this.dispatchEvent(new CustomEvent(RESUME_CLICK, { bubbles: true, composed: true }));
+      }
     });
   }
 
@@ -249,19 +247,15 @@ export class JoinOverlay extends HTMLElement {
   }
 
   setConnected(connected: boolean) {
-    if (!this.formEl) return;
-    if (connected) {
-      this.formEl.classList.add('hidden');
-      this.resumeBtnEl.classList.remove('hidden');
-    } else {
-      this.formEl.classList.remove('hidden');
-      this.resumeBtnEl.classList.add('hidden');
+    this.isConnectedState = connected;
+    if (this.nameInputEl) {
+      this.nameInputEl.disabled = connected;
     }
   }
 
   setLoading(loading: boolean) {
     if (!this.nameInputEl) return;
-    this.nameInputEl.disabled = loading;
+    this.nameInputEl.disabled = loading || this.isConnectedState;
     this.enterBtnEl.disabled = loading;
   }
 }
