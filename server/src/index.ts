@@ -10,6 +10,8 @@ import {
   getHub,
   getOrCreateHub,
   addPost,
+  updateHubSettings,
+  incrementPostReaction,
   getRandomNpcDialogue,
   getPlayerStickers,
   claimNpcSticker,
@@ -41,9 +43,26 @@ app.post('/api/hubs/:owner/claim', (req, res) => {
 });
 
 app.post('/api/hubs/:owner/posts', (req, res) => {
+  const hub = getHub(req.params.owner);
+  if (!hub) return res.status(404).json({ error: 'unknown owner' });
+
+  if (req.body.type === 'guestbook' && !hub.allowVisitorPosts) {
+    return res.status(403).json({ error: 'visitor posts disabled' });
+  }
+
   const post = addPost(req.params.owner, req.body);
   if (!post) return res.status(400).json({ error: 'invalid post or unknown owner' });
   res.json(post);
+});
+
+app.post('/api/hubs/:owner/settings', (req, res) => {
+  const success = updateHubSettings(req.params.owner, !!req.body.allowVisitorPosts);
+  res.json({ success });
+});
+
+app.post('/api/posts/:postId/react', (req, res) => {
+  const success = incrementPostReaction(req.params.postId, String(req.body.emoji ?? ''));
+  res.json({ success });
 });
 
 // --- NPC & Stickers API --------------------------------------------------------

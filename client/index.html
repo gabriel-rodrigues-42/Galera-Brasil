@@ -88,6 +88,43 @@
         <button type="button" id="post-panel-close">Fechar</button>
         <p class="panel-hint">Esc para fechar</p>
       </div>
+      <div id="guestbook-panel" class="hidden">
+        <h2>Mural de Visitantes</h2>
+        <div id="guestbook-comments" class="guestbook-comments-list"></div>
+        <p id="guestbook-empty-hint" class="hidden">
+          Nenhum recado ainda. Seja o primeiro a escrever!
+        </p>
+
+        <!-- Visitor message submission -->
+        <div id="guestbook-form-section">
+          <h3>Deixe um recado</h3>
+          <form id="guestbook-form" autocomplete="off">
+            <textarea
+              id="guestbook-message-input"
+              placeholder="Escreva sua mensagem aqui..."
+              maxlength="300"
+              required
+            ></textarea>
+            <div class="guestbook-form-actions">
+              <button type="submit">Enviar Recado</button>
+            </div>
+          </form>
+        </div>
+        <p id="guestbook-locked-msg" class="hidden">
+          🔒 O proprietário desativou novas postagens de visitantes.
+        </p>
+
+        <!-- Owner Settings -->
+        <div id="guestbook-settings-section" class="hidden">
+          <label class="guestbook-checkbox-label">
+            <input type="checkbox" id="guestbook-allow-toggle" />
+            <span>Permitir posts de visitantes</span>
+          </label>
+        </div>
+
+        <button type="button" id="guestbook-panel-close">Fechar</button>
+        <p class="panel-hint">Esc para fechar</p>
+      </div>
       <div id="npc-panel" class="hidden">
         <h2 id="npc-panel-name">Nome do NPC</h2>
         <div id="npc-panel-dialogue">

@@ -76,6 +76,13 @@ if (!playerUpgradesColumns.some((c) => c.name === 'suco_count')) {
   db.exec('ALTER TABLE player_upgrades ADD COLUMN suco_count INTEGER NOT NULL DEFAULT 0');
 }
 
+const hubsColumns = db.prepare('PRAGMA table_info(hubs)').all() as {
+  name: string;
+}[];
+if (!hubsColumns.some((c) => c.name === 'allow_visitor_posts')) {
+  db.exec('ALTER TABLE hubs ADD COLUMN allow_visitor_posts INTEGER NOT NULL DEFAULT 1');
+}
+
 // Pre-populate NPC content if empty
 const countRow = db.prepare('SELECT COUNT(*) as c FROM npc_content').get() as { c: number };
 if (countRow.c === 0) {
@@ -175,13 +182,21 @@ if (placedObjectsCount.c === 0) {
 export type StoredPost =
   | { type: 'text'; id: string; title: string; body: string }
   | { type: 'link'; id: string; label: string; url: string; description: string }
-  | { type: 'image'; id: string; caption: string; accentColor: string };
+  | { type: 'image'; id: string; caption: string; accentColor: string }
+  | {
+      type: 'guestbook';
+      id: string;
+      author: string;
+      message: string;
+      reactions: Record<string, number>;
+    };
 
 export interface HubRecord {
   owner: string;
   bio: string;
   tag: string;
   slot: number;
+  allowVisitorPosts: boolean;
   posts: StoredPost[];
 }
 
@@ -211,10 +226,20 @@ export function listHubs(): HubSummary[] {
 }
 
 export function getHub(owner: string): HubRecord | null {
-  const row = db.prepare('SELECT owner, bio, tag, slot FROM hubs WHERE owner = ?').get(owner) as
-    { owner: string; bio: string; tag: string; slot: number } | undefined;
+  const row = db
+    .prepare('SELECT owner, bio, tag, slot, allow_visitor_posts FROM hubs WHERE owner = ?')
+    .get(owner) as
+    | { owner: string; bio: string; tag: string; slot: number; allow_visitor_posts: number }
+    | undefined;
   if (!row) return null;
-  return { ...row, posts: getPostsForOwner(owner) };
+  return {
+    owner: row.owner,
+    bio: row.bio,
+    tag: row.tag,
+    slot: row.slot,
+    allowVisitorPosts: row.allow_visitor_posts !== 0,
+    posts: getPostsForOwner(owner),
+  };
 }
 
 /** Creates a hub with a welcome post the first time this name is seen;
@@ -227,13 +252,9 @@ export function getOrCreateHub(rawOwner: string): HubRecord {
   if (existing) return existing;
 
   const slot = (db.prepare('SELECT COUNT(*) as c FROM hubs').get() as { c: number }).c;
-  db.prepare('INSERT INTO hubs (owner, bio, tag, slot, created_at) VALUES (?, ?, ?, ?, ?)').run(
-    owner,
-    `O hub de ${owner} na Galera Brasil.`,
-    '#GaleraBrasil',
-    slot,
-    Date.now()
-  );
+  db.prepare(
+    'INSERT INTO hubs (owner, bio, tag, slot, allow_visitor_posts, created_at) VALUES (?, ?, ?, ?, 1, ?)'
+  ).run(owner, `O hub de ${owner} na Galera Brasil.`, '#GaleraBrasil', slot, Date.now());
   db.prepare('INSERT INTO posts (id, owner, type, data, created_at) VALUES (?, ?, ?, ?, ?)').run(
     randomUUID(),
     owner,
@@ -251,13 +272,14 @@ export function getOrCreateHub(rawOwner: string): HubRecord {
 
 export type NewPostInput =
   | { type: 'text'; title: string; body: string }
-  | { type: 'link'; label: string; url: string; description: string };
+  | { type: 'link'; label: string; url: string; description: string }
+  | { type: 'guestbook'; author: string; message: string };
 
 export function addPost(owner: string, input: NewPostInput): StoredPost | null {
   if (!getHub(owner)) return null;
 
   const id = randomUUID();
-  let data: Record<string, string>;
+  let data: Record<string, any>;
   if (input.type === 'text') {
     const title = String(input.title ?? '')
       .trim()
@@ -267,7 +289,7 @@ export function addPost(owner: string, input: NewPostInput): StoredPost | null {
       .slice(0, MAX_TEXT_LENGTH);
     if (!title || !body) return null;
     data = { title, body };
-  } else {
+  } else if (input.type === 'link') {
     const label = String(input.label ?? '')
       .trim()
       .slice(0, MAX_TITLE_LENGTH);
@@ -279,6 +301,21 @@ export function addPost(owner: string, input: NewPostInput): StoredPost | null {
       .slice(0, MAX_TEXT_LENGTH);
     if (!label || !url) return null;
     data = { label, url, description };
+  } else if (input.type === 'guestbook') {
+    const author = String(input.author ?? '')
+      .trim()
+      .slice(0, MAX_NAME_LENGTH);
+    const message = String(input.message ?? '')
+      .trim()
+      .slice(0, MAX_TEXT_LENGTH);
+    if (!author || !message) return null;
+    data = {
+      author,
+      message,
+      reactions: { thumbs: 0, heart: 0, orange: 0 },
+    };
+  } else {
+    return null;
   }
 
   db.prepare('INSERT INTO posts (id, owner, type, data, created_at) VALUES (?, ?, ?, ?, ?)').run(
@@ -289,6 +326,37 @@ export function addPost(owner: string, input: NewPostInput): StoredPost | null {
     Date.now()
   );
   return { id, type: input.type, ...data } as StoredPost;
+}
+
+export function updateHubSettings(owner: string, allowVisitorPosts: boolean): boolean {
+  if (!getHub(owner)) return false;
+  db.prepare('UPDATE hubs SET allow_visitor_posts = ? WHERE owner = ?').run(
+    allowVisitorPosts ? 1 : 0,
+    owner
+  );
+  return true;
+}
+
+export function incrementPostReaction(postId: string, emoji: string): boolean {
+  const row = db.prepare('SELECT owner, type, data FROM posts WHERE id = ?').get(postId) as
+    { owner: string; type: string; data: string } | undefined;
+  if (!row) return false;
+
+  try {
+    const data = JSON.parse(row.data);
+    if (!data.reactions) {
+      data.reactions = { thumbs: 0, heart: 0, orange: 0 };
+    }
+    if (data.reactions[emoji] === undefined) {
+      data.reactions[emoji] = 0;
+    }
+    data.reactions[emoji] += 1;
+
+    db.prepare('UPDATE posts SET data = ? WHERE id = ?').run(JSON.stringify(data), postId);
+    return true;
+  } catch (err) {
+    return false;
+  }
 }
 
 // --- NPC & Sticker system helpers ----------------------------------------------

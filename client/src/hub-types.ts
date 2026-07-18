@@ -20,7 +20,15 @@ interface LinkPost {
   description: string;
 }
 
-export type HubPost = ImagePost | TextPost | LinkPost;
+interface GuestbookPost {
+  type: 'guestbook';
+  id: string;
+  author: string;
+  message: string;
+  reactions: Record<string, number>;
+}
+
+export type HubPost = ImagePost | TextPost | LinkPost | GuestbookPost;
 
 export interface HubDescription {
   owner: string;

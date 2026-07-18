@@ -144,3 +144,63 @@ export function makeChatBubbleTexture(text: string): THREE.CanvasTexture {
     wrapText(ctx, text, 18, 20, 348, 26);
   });
 }
+
+/** A corkboard texture for visitor guestbooks. */
+export function makeCorkboardTexture(title: string): THREE.CanvasTexture {
+  return makeCanvasTexture(512, 320, (ctx) => {
+    // Cork background
+    ctx.fillStyle = '#ba8a5d';
+    ctx.fillRect(0, 0, 512, 320);
+    // Darker wooden frame
+    ctx.strokeStyle = '#5c3a21';
+    ctx.lineWidth = 14;
+    ctx.strokeRect(7, 7, 498, 306);
+
+    // Title label background plaque
+    ctx.fillStyle = '#f4f1e8';
+    ctx.beginPath();
+    ctx.roundRect(80, 40, 352, 60, 6);
+    ctx.fill();
+    ctx.strokeStyle = '#8a5a36';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Title text
+    ctx.fillStyle = '#3e2723';
+    ctx.font = 'bold 26px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(title, 256, 70);
+
+    // Some simulated pinned sticky notes!
+    ctx.fillStyle = '#fff9c4'; // Yellow sticky note
+    ctx.fillRect(60, 140, 120, 100);
+    ctx.strokeStyle = '#fbc02d';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(60, 140, 120, 100);
+
+    ctx.fillStyle = '#e1f5fe'; // Blue sticky note
+    ctx.fillRect(330, 150, 120, 100);
+    ctx.strokeStyle = '#0288d1';
+    ctx.strokeRect(330, 150, 120, 100);
+
+    // Draw little pin pins!
+    ctx.fillStyle = '#ff1744'; // Red pin
+    ctx.beginPath();
+    ctx.arc(120, 145, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#2979ff'; // Blue pin
+    ctx.beginPath();
+    ctx.arc(390, 155, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pinned notes hint text
+    ctx.fillStyle = '#f4f1e8';
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 4;
+    ctx.fillText('Mural de Visitantes (E)', 256, 275);
+  });
+}

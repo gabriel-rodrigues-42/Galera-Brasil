@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import type { HubDescription, HubPost } from './hub-types';
-import { makeImagePlaceholderTexture, makePlaqueTexture, makeLinkLabelTexture } from './textures';
+import {
+  makeImagePlaceholderTexture,
+  makePlaqueTexture,
+  makeLinkLabelTexture,
+  makeCorkboardTexture,
+} from './textures';
 
 export interface Interactable {
   object: THREE.Object3D;
@@ -129,6 +134,36 @@ export function buildHub(data: HubDescription): BuiltHub {
     pedestal.position.set(linkXs[i], 0, 1.2);
     group.add(pedestal);
     interactables.push({ object: pedestal, post, label: post.label });
+  });
+
+  // Guestbook corkboard on the East wall (empty wall space)
+  const corkboardTexture = makeCorkboardTexture('Deixe seu Recado!');
+  const boardFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(0.12, 1.8, 2.5),
+    new THREE.MeshStandardMaterial({ color: 0x4e2d19, roughness: 0.85 })
+  );
+  boardFrame.position.set(ROOM_HALF - 0.08, 1.6, 0);
+
+  const boardPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.35, 1.65),
+    new THREE.MeshStandardMaterial({ map: corkboardTexture, roughness: 0.9 })
+  );
+  boardPlane.position.x = -0.065; // offset slightly out of the frame
+  boardPlane.rotation.y = -Math.PI / 2; // face west (into the room)
+  boardFrame.add(boardPlane);
+  group.add(boardFrame);
+
+  // Register the guestbook as an interactable
+  interactables.push({
+    object: boardFrame,
+    post: {
+      id: 'guestbook_wall',
+      type: 'guestbook',
+      author: '',
+      message: '',
+      reactions: {},
+    } as any,
+    label: 'Mural de Visitantes',
   });
 
   return {

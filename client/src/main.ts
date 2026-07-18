@@ -26,6 +26,22 @@ const hintEl = document.querySelector<HTMLDivElement>('#interact-hint')!;
 const panelEl = document.querySelector<HTMLDivElement>('#post-panel')!;
 const panelContentEl = document.querySelector<HTMLDivElement>('#post-panel-content')!;
 const panelCloseEl = document.querySelector<HTMLButtonElement>('#post-panel-close')!;
+
+// Guestbook selectors
+const guestbookPanelEl = document.querySelector<HTMLDivElement>('#guestbook-panel')!;
+const guestbookCommentsEl = document.querySelector<HTMLDivElement>('#guestbook-comments')!;
+const guestbookEmptyHintEl = document.querySelector<HTMLParagraphElement>('#guestbook-empty-hint')!;
+const guestbookFormSectionEl = document.querySelector<HTMLDivElement>('#guestbook-form-section')!;
+const guestbookFormEl = document.querySelector<HTMLFormElement>('#guestbook-form')!;
+const guestbookMessageInputEl = document.querySelector<HTMLTextAreaElement>(
+  '#guestbook-message-input'
+)!;
+const guestbookLockedMsgEl = document.querySelector<HTMLParagraphElement>('#guestbook-locked-msg')!;
+const guestbookSettingsSectionEl = document.querySelector<HTMLDivElement>(
+  '#guestbook-settings-section'
+)!;
+const guestbookAllowToggleEl = document.querySelector<HTMLInputElement>('#guestbook-allow-toggle')!;
+const guestbookPanelCloseEl = document.querySelector<HTMLButtonElement>('#guestbook-panel-close')!;
 const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
 const debugBadgeEl = document.querySelector<HTMLButtonElement>('#debug-badge')!;
 const debugStatsEl = document.querySelector<HTMLPreElement>('#debug-stats')!;
@@ -422,6 +438,7 @@ let currentHubOwner: string | null = null;
 let hubTransitionInFlight = false;
 let myName = '';
 let openPost: HubPost | null = null;
+let guestbookOpen = false;
 let openNpc: NpcDef | null = null;
 let gmPanelOpen = false;
 type BuildType =
@@ -763,6 +780,7 @@ window.addEventListener('keydown', (e) => {
   if (openNpc) closeNpcPanel();
   if (addPostOpen) closeAddPostForm();
   if (gmPanelOpen) closeGmPanel();
+  if (guestbookOpen) closeGuestbookPanel();
   resumeAfterUI();
 });
 
@@ -1565,11 +1583,14 @@ function renderPostPanel(post: HubPost): string {
   if (post.type === 'text') {
     return `<h2>${escapeHtml(post.title)}</h2><p>${escapeHtml(post.body)}</p>`;
   }
-  return `
-    <h2>${escapeHtml(post.label)}</h2>
-    <p>${escapeHtml(post.description)}</p>
-    <a href="${encodeURI(post.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(post.url)}</a>
-  `;
+  if (post.type === 'link') {
+    return `
+      <h2>${escapeHtml(post.label)}</h2>
+      <p>${escapeHtml(post.description)}</p>
+      <a href="${encodeURI(post.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(post.url)}</a>
+    `;
+  }
+  return '';
 }
 
 function openPostPanel(post: HubPost) {
@@ -1587,9 +1608,157 @@ function closePostPanel() {
   log('info', 'post panel closed');
 }
 
+function openGuestbookPanel() {
+  if (!currentHubOwner) return;
+  guestbookOpen = true;
+  guestbookPanelEl.classList.remove('hidden');
+  velocity.set(0, 0, 0);
+  releasePointerForUI();
+
+  api
+    .getHub(currentHubOwner)
+    .then((hub) => {
+      const guestbookPosts = hub.posts.filter((p) => p.type === 'guestbook') as Extract<
+        HubPost,
+        { type: 'guestbook' }
+      >[];
+
+      const isOwner = currentHubOwner === myName;
+      if (isOwner) {
+        guestbookSettingsSectionEl.classList.remove('hidden');
+        guestbookAllowToggleEl.checked = hub.allowVisitorPosts;
+        guestbookFormSectionEl.classList.add('hidden');
+        guestbookLockedMsgEl.classList.add('hidden');
+      } else {
+        guestbookSettingsSectionEl.classList.add('hidden');
+        if (hub.allowVisitorPosts) {
+          guestbookFormSectionEl.classList.remove('hidden');
+          guestbookLockedMsgEl.classList.add('hidden');
+        } else {
+          guestbookFormSectionEl.classList.add('hidden');
+          guestbookLockedMsgEl.classList.remove('hidden');
+        }
+      }
+
+      renderGuestbookComments(guestbookPosts);
+    })
+    .catch((err) => {
+      log('error', `Failed to load guestbook for ${currentHubOwner}: ${err}`);
+    });
+}
+
+function closeGuestbookPanel() {
+  guestbookOpen = false;
+  guestbookPanelEl.classList.add('hidden');
+  log('info', 'guestbook panel closed');
+}
+
+function renderGuestbookComments(posts: Extract<HubPost, { type: 'guestbook' }>[]) {
+  if (posts.length === 0) {
+    guestbookEmptyHintEl.classList.remove('hidden');
+    guestbookCommentsEl.innerHTML = '';
+    return;
+  }
+  guestbookEmptyHintEl.classList.add('hidden');
+
+  guestbookCommentsEl.innerHTML = posts
+    .slice()
+    .reverse() // show newest comments on top!
+    .map((post) => {
+      const reactions = post.reactions || { thumbs: 0, heart: 0, orange: 0 };
+      return `
+        <div class="guestbook-comment-card" data-post-id="${post.id}">
+          <div class="guestbook-comment-header">
+            <span class="guestbook-comment-author">✏️ ${escapeHtml(post.author)}</span>
+          </div>
+          <div class="guestbook-comment-body">${escapeHtml(post.message)}</div>
+          <div class="guestbook-comment-reactions">
+            <button class="guestbook-reaction-btn" data-emoji="thumbs">
+              👍 <span class="reaction-count">${reactions.thumbs || 0}</span>
+            </button>
+            <button class="guestbook-reaction-btn" data-emoji="heart">
+              ❤️ <span class="reaction-count">${reactions.heart || 0}</span>
+            </button>
+            <button class="guestbook-reaction-btn" data-emoji="orange">
+              🍊 <span class="reaction-count">${reactions.orange || 0}</span>
+            </button>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
 panelCloseEl.addEventListener('click', () => {
   closePostPanel();
   resumeAfterUI();
+});
+
+guestbookPanelCloseEl.addEventListener('click', () => {
+  closeGuestbookPanel();
+  resumeAfterUI();
+});
+
+guestbookFormEl.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const message = guestbookMessageInputEl.value.trim();
+  const owner = currentHubOwner;
+  if (!message || !owner || !myName) return;
+
+  api
+    .addPost(owner, {
+      type: 'guestbook',
+      author: myName,
+      message,
+    })
+    .then(() => {
+      guestbookMessageInputEl.value = '';
+      openGuestbookPanel();
+      hubManager.rebuild(owner);
+    })
+    .catch((err) => {
+      log('error', `Failed to submit guest message: ${err}`);
+    });
+});
+
+guestbookAllowToggleEl.addEventListener('change', () => {
+  if (!currentHubOwner || currentHubOwner !== myName) return;
+  const allowed = guestbookAllowToggleEl.checked;
+  api
+    .updateHubSettings(currentHubOwner, allowed)
+    .then((res) => {
+      if (res.success) {
+        log('info', `Hub settings updated: allow_visitor_posts = ${allowed}`);
+      }
+    })
+    .catch((err) => {
+      log('error', `Failed to update hub settings: ${err}`);
+    });
+});
+
+guestbookCommentsEl.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest('.guestbook-reaction-btn');
+  if (!btn) return;
+  const card = btn.closest('.guestbook-comment-card');
+  if (!card) return;
+
+  const postId = card.getAttribute('data-post-id');
+  const emoji = btn.getAttribute('data-emoji');
+  if (!postId || !emoji) return;
+
+  api
+    .reactToPost(postId, emoji)
+    .then((res) => {
+      if (res.success) {
+        const countSpan = btn.querySelector('.reaction-count');
+        if (countSpan) {
+          countSpan.textContent = String(Number(countSpan.textContent) + 1);
+        }
+      }
+    })
+    .catch((err) => {
+      log('error', `Failed to react to post ${postId}: ${err}`);
+    });
 });
 
 async function enterHub(owner: string) {
@@ -1933,6 +2102,8 @@ function updateInteraction() {
     hint = 'Pressione E para fechar';
   } else if (openNpc) {
     hint = 'Pressione E para fechar';
+  } else if (guestbookOpen) {
+    hint = 'Pressione E para fechar';
   } else if (hovered) {
     hint = `Pressione E — ${hovered.label}`;
   } else if (hoveredNpc) {
@@ -1955,8 +2126,15 @@ function updateInteraction() {
     } else if (openNpc) {
       closeNpcPanel();
       resumeAfterUI();
+    } else if (guestbookOpen) {
+      closeGuestbookPanel();
+      resumeAfterUI();
     } else if (hovered) {
-      openPostPanel(hovered.post);
+      if (hovered.post.type === 'guestbook') {
+        openGuestbookPanel();
+      } else {
+        openPostPanel(hovered.post);
+      }
     } else if (hoveredNpc) {
       openNpcPanel(hoveredNpc);
     } else if (mode === 'plaza' && nearEntranceOwner) {

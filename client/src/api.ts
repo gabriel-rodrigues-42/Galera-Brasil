@@ -8,12 +8,14 @@ export interface HubSummary {
 
 export interface HubRecord extends HubSummary {
   bio: string;
+  allowVisitorPosts: boolean;
   posts: HubPost[];
 }
 
 export type NewPostInput =
   | { type: 'text'; title: string; body: string }
-  | { type: 'link'; label: string; url: string; description: string };
+  | { type: 'link'; label: string; url: string; description: string }
+  | { type: 'guestbook'; author: string; message: string };
 
 function getApiBase(): string {
   // In Vite dev, the app can run on any free port (not just 5173), while the
@@ -38,6 +40,25 @@ export function getHub(owner: string): Promise<HubRecord> {
 
 export function claimHub(owner: string): Promise<HubRecord> {
   return apiFetch(`/api/hubs/${encodeURIComponent(owner)}/claim`, { method: 'POST' });
+}
+
+export function updateHubSettings(
+  owner: string,
+  allowVisitorPosts: boolean
+): Promise<{ success: boolean }> {
+  return apiFetch(`/api/hubs/${encodeURIComponent(owner)}/settings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ allowVisitorPosts }),
+  });
+}
+
+export function reactToPost(postId: string, emoji: string): Promise<{ success: boolean }> {
+  return apiFetch(`/api/posts/${encodeURIComponent(postId)}/react`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emoji }),
+  });
 }
 
 export function addPost(owner: string, post: NewPostInput): Promise<HubPost> {

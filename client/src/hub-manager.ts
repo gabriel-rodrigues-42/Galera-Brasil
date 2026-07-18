@@ -3,6 +3,7 @@ import { buildHub, ROOM_HALF, type BuiltHub } from './hub-builder';
 import type { HubDescription } from './hub-types';
 import * as api from './api';
 import { log } from './logger';
+import { makeNameTagTexture } from './textures';
 
 const RING_BASE_RADIUS = 20;
 const RING_RADIUS_STEP = 15;
@@ -39,6 +40,9 @@ export interface HubFacade {
   entrancePoint: { x: number; z: number };
   interiorOrigin: THREE.Vector3;
   built: BuiltHub | null;
+  facadeGroup?: THREE.Group;
+  nameSprite?: THREE.Sprite;
+  beacon?: THREE.Mesh;
 }
 
 export { ROOM_HALF };
@@ -148,6 +152,15 @@ export class HubManager {
     beacon.position.set(x, 3.6, z);
     this.scene.add(beacon);
 
+    const nameTexture = makeNameTagTexture(`Hub de ${summary.owner}`, '#ffcf5c');
+    const nameSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: nameTexture, depthTest: false })
+    );
+    nameSprite.scale.set(1.4, 0.35, 1);
+    nameSprite.position.set(x, 3.9, z);
+    nameSprite.renderOrder = 9;
+    this.scene.add(nameSprite);
+
     this.hubs.set(summary.owner, {
       owner: summary.owner,
       tag: summary.tag,
@@ -155,6 +168,9 @@ export class HubManager {
       entrancePoint: { x, z: z - 2.5 },
       interiorOrigin: this.interiorOriginFor(summary.slot),
       built: null,
+      facadeGroup: facade,
+      nameSprite,
+      beacon,
     });
     log('info', `hub facade added: "${summary.owner}" at slot ${summary.slot}`);
   }
