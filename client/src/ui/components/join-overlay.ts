@@ -16,10 +16,10 @@ sheet.replaceSync(`
     transition: opacity var(--transition-fast);
   }
 
-  :host([hidden]) {
-    display: none;
-    opacity: 0;
-    pointer-events: none;
+  :host(.hidden) {
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
   .card {
