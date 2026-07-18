@@ -132,6 +132,18 @@ export class AvatarManager {
     group.rotation.y = state.rotY;
     this.scene.add(group);
 
+    if (state.isGhost) {
+      group.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (mesh.isMesh && mesh.material) {
+          const mat = mesh.material as THREE.Material;
+          mat.transparent = true;
+          mat.opacity = 0.35;
+          mat.needsUpdate = true;
+        }
+      });
+    }
+
     this.avatars.set(sessionId, {
       group,
       nameSprite,
@@ -176,6 +188,17 @@ export class AvatarManager {
     if (!avatar) return;
     this.resolveWorldPos(state, avatar.targetPos);
     avatar.targetRotY = state.rotY;
+
+    // Apply ghost transparency
+    avatar.group.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh && mesh.material) {
+        const mat = mesh.material as THREE.Material;
+        mat.transparent = !!state.isGhost;
+        mat.opacity = state.isGhost ? 0.35 : 1.0;
+        mat.needsUpdate = true;
+      }
+    });
   }
 
   remove(sessionId: string) {

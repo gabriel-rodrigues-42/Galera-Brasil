@@ -19,6 +19,8 @@ export const RADIO_PREV = 'radio-prev';
 export const VOLUME_CHANGE = 'volume-change';
 export const GM_BYPASS_TOGGLE = 'gm-bypass-toggle';
 export const GM_HUB_PERMISSION_TOGGLE = 'gm-hub-permission-toggle';
+export const GM_START_MUTIRAO = 'gm-start-mutirao';
+export const GM_FORCE_MUTIRAO = 'gm-force-mutirao';
 
 export const GUESTBOOK_SUBMIT = 'guestbook-submit';
 export const GUESTBOOK_REACT = 'guestbook-react';

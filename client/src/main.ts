@@ -3,7 +3,7 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { HUB_EXIT_ZONE, type Interactable } from './hub-builder';
 import { HubManager, ROOM_HALF, disposeObject3D } from './hub-manager';
 import { log, initDebugPanel, updateStats, installGlobalErrorLogging } from './logger';
-import { Network } from './network';
+import { Network, type DebrisNetState } from './network';
 import { AvatarManager } from './avatars';
 import { NpcManager, type NpcDef } from './npc-manager';
 import { RadioManager } from './radio-manager';
@@ -22,10 +22,15 @@ import type { BuilderStatus } from './ui/components/builder-status';
 import { initGmController } from './ui/controllers/gm-controller';
 import { initHubPanelsController } from './ui/controllers/hub-panels-controller';
 import { initJoinController } from './ui/controllers/join-controller';
+import { initGameController } from './ui/controllers/game-controller';
 import type { JoinOverlay } from './ui/components/join-overlay';
 import type { GuestbookPanel } from './ui/components/guestbook-panel';
 import type { PostPanel } from './ui/components/post-panel';
 import type { AddPostPanel } from './ui/components/add-post-panel';
+import type { GameTimerHud } from './ui/components/game-timer-hud';
+import type { GameQuestGuide } from './ui/components/game-quest-guide';
+import type { GameAssemblyOverlay } from './ui/components/game-assembly-overlay';
+import type { MinigameHost } from './ui/components/minigame-host';
 import type { EnemyKind, RespawnTarget, VolumeChannel } from './ui/events';
 import { BUILD_TYPE_LABELS, type BuildType } from './ui/gm-catalog';
 import './ui/tokens.css';
@@ -45,6 +50,11 @@ const hintEl = document.querySelector<HTMLDivElement>('#interact-hint')!;
 const guestbookPanelEl = document.querySelector<GuestbookPanel>('#guestbook-panel')!;
 const postPanelEl = document.querySelector<PostPanel>('#post-panel')!;
 const addPostPanelEl = document.querySelector<AddPostPanel>('#add-post-panel')!;
+const gameTimerEl = document.querySelector<GameTimerHud>('#game-timer')!;
+const gameQuestEl = document.querySelector<GameQuestGuide>('#game-quest')!;
+const assemblyEl = document.querySelector<GameAssemblyOverlay>('#assembly')!;
+const blackoutViggnetteEl = document.querySelector<HTMLDivElement>('#blackout-vignette')!;
+const minigameEl = document.querySelector<MinigameHost>('#minigame')!;
 
 const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
 const debugBadgeEl = document.querySelector<HTMLButtonElement>('#debug-badge')!;
@@ -385,6 +395,125 @@ function makeSolarCanopy(x: number, z: number, rotation = 0) {
   return group;
 }
 
+function makeMegaphoneMesh(x: number, y: number, z: number) {
+  const group = new THREE.Group();
+
+  // Base stand
+  const stand = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.04, 0.9, 8),
+    new THREE.MeshStandardMaterial({ color: 0x7f8c8d, metalness: 0.8 })
+  );
+  stand.position.y = 0.45;
+  stand.castShadow = true;
+  group.add(stand);
+
+  // Megaphone horn
+  const horn = new THREE.Mesh(
+    new THREE.ConeGeometry(0.18, 0.45, 12),
+    new THREE.MeshStandardMaterial({ color: 0xe07a5f, roughness: 0.5 })
+  );
+  horn.position.set(0, 0.9, 0);
+  horn.rotation.z = -Math.PI / 4;
+  horn.castShadow = true;
+  group.add(horn);
+
+  group.position.set(x, y, z);
+  return group;
+}
+
+function makeLixoDebris(x: number, y: number, z: number) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x3d3d3d, roughness: 0.9 });
+
+  const s1 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), mat);
+  s1.position.set(-0.15, 0.2, 0.15);
+  s1.castShadow = true;
+  group.add(s1);
+
+  const s2 = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), mat);
+  s2.position.set(0.15, 0.25, -0.1);
+  s2.castShadow = true;
+  group.add(s2);
+
+  const s3 = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), mat);
+  s3.position.set(0, 0.4, 0);
+  s3.castShadow = true;
+  group.add(s3);
+
+  group.position.set(x, y, z);
+  return group;
+}
+
+function makePlacaDebris(x: number, y: number, z: number) {
+  const group = new THREE.Group();
+
+  const post = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.04, 0.8, 8),
+    new THREE.MeshStandardMaterial({ color: 0x7f8c8d, metalness: 0.8, roughness: 0.2 })
+  );
+  post.position.y = 0.4;
+  post.castShadow = true;
+  group.add(post);
+
+  const panel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.05, 0.5),
+    new THREE.MeshStandardMaterial({ color: 0x274a63, roughness: 0.3, metalness: 0.5 })
+  );
+  panel.position.set(0, 0.8, 0);
+  panel.rotation.set(0.4, 0, 0.2);
+  panel.castShadow = true;
+  group.add(panel);
+
+  group.position.set(x, y, z);
+  return group;
+}
+
+function makeVitoriaRegiaDebris(x: number, y: number, z: number) {
+  const group = new THREE.Group();
+
+  const leaf = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.6, 0.6, 0.02, 16),
+    new THREE.MeshStandardMaterial({ color: 0x3d1b54, roughness: 0.8 })
+  );
+  leaf.position.y = 0.01;
+  leaf.receiveShadow = true;
+  group.add(leaf);
+
+  const flower = new THREE.Mesh(
+    new THREE.ConeGeometry(0.15, 0.25, 8),
+    new THREE.MeshStandardMaterial({ color: 0x8a2be2, roughness: 0.6 })
+  );
+  flower.position.set(0, 0.15, 0);
+  flower.rotation.x = Math.PI;
+  group.add(flower);
+
+  group.position.set(x, y, z);
+  return group;
+}
+
+function makeMatoDebris(x: number, y: number, z: number) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x5a6332, roughness: 1.0 });
+
+  const w1 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4), mat);
+  w1.position.set(-0.2, 0.3, 0);
+  w1.castShadow = true;
+  group.add(w1);
+
+  const w2 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.35), mat);
+  w2.position.set(0.2, 0.25, 0.1);
+  w2.castShadow = true;
+  group.add(w2);
+
+  const w3 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3), mat);
+  w3.position.set(0, 0.45, -0.15);
+  w3.castShadow = true;
+  group.add(w3);
+
+  group.position.set(x, y, z);
+  return group;
+}
+
 const solarCanopyGroups: THREE.Group[] = [];
 
 function spawnSolarCanopies() {
@@ -407,6 +536,9 @@ function clearSolarCanopies() {
 
 spawnSolarCanopies();
 
+const megaphone = makeMegaphoneMesh(0, 0, 8);
+scene.add(megaphone);
+
 // --- Content Garden hubs: one per registered friend, fetched from the server ---
 
 const hubManager = new HubManager(scene);
@@ -426,6 +558,8 @@ let builderModeActive = false;
 const gmPlacedObjects: THREE.Object3D[] = [];
 let stickersCollected: string[] = [];
 const lastPlazaTransform = { position: new THREE.Vector3(0, 1.7, 8), yaw: 0 };
+const clientDebris = new Map<string, { group: THREE.Group; state: DebrisNetState }>();
+let lastRepairTickAt = 0;
 
 // --- Multiplayer: networking, remote avatars, chat -----------------------------
 
@@ -508,6 +642,61 @@ network.onPickupAdd = (pickupId, state) => pickupManager.add(pickupId, state);
 network.onPickupChange = (pickupId, state) => pickupManager.updateTarget(pickupId, state);
 network.onPickupRemove = (pickupId) => pickupManager.remove(pickupId);
 
+network.onDebrisAdd = (id, state) => {
+  if (clientDebris.has(id)) return;
+  let group: THREE.Group;
+  if (state.kind === 'lixo') {
+    group = makeLixoDebris(state.x, state.y, state.z);
+  } else if (state.kind === 'placa') {
+    group = makePlacaDebris(state.x, state.y, state.z);
+  } else if (state.kind === 'vitoria_regia') {
+    group = makeVitoriaRegiaDebris(state.x, state.y, state.z);
+  } else {
+    group = makeMatoDebris(state.x, state.y, state.z);
+  }
+  scene.add(group);
+  clientDebris.set(id, { group, state });
+};
+
+network.onDebrisChange = (id, state) => {
+  const entry = clientDebris.get(id);
+  if (!entry) return;
+  entry.state = state;
+  if (state.status === 'cleared') {
+    entry.group.visible = false;
+  }
+};
+
+network.onDebrisRemove = (id) => {
+  const entry = clientDebris.get(id);
+  if (!entry) return;
+  scene.remove(entry.group);
+  disposeObject3D(entry.group);
+  clientDebris.delete(id);
+};
+
+network.onTeleport = (pos) => {
+  controls.object.position.set(pos.x, pos.y, pos.z);
+  velocity.set(0, 0, 0);
+};
+
+let detectorHintTimeout: ReturnType<typeof setTimeout> | null = null;
+const detectorHintEl = document.createElement('div');
+detectorHintEl.style.cssText =
+  'position:fixed;top:22%;left:50%;transform:translateX(-50%);background:rgba(39,74,99,0.92);' +
+  'color:#f2cc8f;font-family:var(--font-display);font-size:15px;padding:10px 22px;border-radius:8px;' +
+  'pointer-events:none;transition:opacity 0.4s;opacity:0;z-index:900;';
+document.body.appendChild(detectorHintEl);
+
+network.onDetectorResult = (sector) => {
+  detectorHintEl.textContent = `📡 Detector: última sabotagem detectada no setor ${sector}!`;
+  detectorHintEl.style.opacity = '1';
+  if (detectorHintTimeout) clearTimeout(detectorHintTimeout);
+  detectorHintTimeout = setTimeout(() => {
+    detectorHintEl.style.opacity = '0';
+  }, 5000);
+};
+
 // --- Player controls: pointer lock + WASD ---------------------------------------
 
 const controls = new PointerLockControls(camera, canvas);
@@ -546,13 +735,15 @@ const combat: CombatManager = new CombatManager({
     !hubPanelsController.isAddPostOpen &&
     !gmController.isOpen &&
     !hubPanelsController.isPostOpen &&
-    !openNpc,
+    !openNpc &&
+    !network.room?.state.players.get(network.sessionId)?.isGhost,
   canSwitch: () =>
     connected &&
     controls.isLocked &&
     !chatInputOpen &&
     !hubPanelsController.isAddPostOpen &&
-    !gmController.isOpen,
+    !gmController.isOpen &&
+    !network.room?.state.players.get(network.sessionId)?.isGhost,
   velocity,
   onRespawn: () => {
     controls.object.position.set(0, 1.7, 8);
@@ -567,7 +758,9 @@ network.onPlayerHit = (event) => combat.handlePlayerHit(event);
 network.onBonk = (event) => combat.handleBonk(event);
 network.onDied = (respawnInMs) => combat.handleDied(respawnInMs);
 network.onRespawned = () => combat.handleRespawned();
+let localSelfState: import('./network').SelfState | null = null;
 network.onSelfChange = (state) => {
+  localSelfState = state;
   hud.show();
   hud.updateSelf(state);
   combat.handleSelfState(state);
@@ -663,6 +856,18 @@ const joinController = initJoinController({
 });
 
 joinController.init();
+
+const gameController = initGameController({
+  gameTimerHud: gameTimerEl,
+  gameQuestGuide: gameQuestEl,
+  assemblyOverlay: assemblyEl,
+  blackoutVignette: blackoutViggnetteEl,
+  network,
+  announce: (text) => appendChatLine('', text, true),
+  releasePointer: () => releasePointerForUI(),
+  resumeGame: () => resumeAfterUI(),
+});
+gameController.init();
 
 // `controls.lock()` fires-and-forgets `canvas.requestPointerLock()` without
 // capturing the promise it returns, so any rejection (e.g. Chrome's ~1.3s
@@ -1655,9 +1860,17 @@ function updateInteraction() {
   let hint = '';
   let hovered: Interactable | null = null;
   let hoveredNpc: NpcDef | null = null;
+  let hoveredDebris: DebrisNetState | null = null;
   let nearEntranceOwner: string | null = null;
   let nearExit = false;
   let isOwnHub = false;
+
+  // Megaphone proximity (center plaza ring at 0, 0, 8)
+  const MEGAPHONE_POS = new THREE.Vector3(0, 0, 8);
+  const nearMegaphone =
+    mode === 'plaza' &&
+    controls.object.position.distanceTo(MEGAPHONE_POS) <= 2.5 &&
+    !!(network.room?.state.gameState === 'playing');
 
   if (mode === 'plaza') {
     if (!hubTransitionInFlight) {
@@ -1676,6 +1889,36 @@ function updateInteraction() {
       const hits = raycaster.intersectObjects(npcManager.getInteractables(), true);
       if (hits.length > 0 && hits[0].distance <= INTERACT_DISTANCE) {
         hoveredNpc = npcManager.getNpcByObject(hits[0].object);
+      }
+    }
+
+    // Raycast against active debris in plaza
+    if (!nearEntranceOwner && !hoveredNpc && !openNpc && !hubPanelsController.isPostOpen) {
+      const activeDebrisGroups: THREE.Group[] = [];
+      clientDebris.forEach((entry) => {
+        if (entry.state.status !== 'cleared') {
+          activeDebrisGroups.push(entry.group);
+        }
+      });
+
+      if (activeDebrisGroups.length > 0) {
+        camera.getWorldPosition(raycastOrigin);
+        camera.getWorldDirection(raycastDir);
+        raycaster.set(raycastOrigin, raycastDir);
+        const debrisHits = raycaster.intersectObjects(activeDebrisGroups, true);
+        if (debrisHits.length > 0 && debrisHits[0].distance <= INTERACT_DISTANCE) {
+          const hitObj = debrisHits[0].object;
+          for (const entry of clientDebris.values()) {
+            let found = false;
+            entry.group.traverse((child) => {
+              if (child === hitObj) found = true;
+            });
+            if (found) {
+              hoveredDebris = entry.state;
+              break;
+            }
+          }
+        }
       }
     }
   } else if (currentHubOwner) {
@@ -1704,16 +1947,38 @@ function updateInteraction() {
     }
   }
 
+  // Handle holding E to repair debris
+  if (hoveredDebris && isDown('KeyE')) {
+    const now = performance.now();
+    if (now - lastRepairTickAt >= 200) {
+      lastRepairTickAt = now;
+      network.sendRepairTick(hoveredDebris.id);
+    }
+  }
+
   if (hubPanelsController.isPostOpen) {
     hint = 'Pressione E para fechar';
   } else if (openNpc) {
     hint = 'Pressione E para fechar';
   } else if (hubPanelsController.isGuestbookOpen) {
     hint = 'Pressione E para fechar';
+  } else if (hoveredDebris) {
+    const keyHint = isDown('KeyE') ? 'Limpando...' : 'Segure E para limpar';
+    const kindName =
+      hoveredDebris.kind === 'lixo'
+        ? 'Lixo'
+        : hoveredDebris.kind === 'placa'
+          ? 'Placa Solar'
+          : hoveredDebris.kind === 'vitoria_regia'
+            ? 'Vitória-Régia Poluída'
+            : 'Mato Seco';
+    hint = `${keyHint} — ${kindName} (${Math.round(hoveredDebris.progress)}%)`;
   } else if (hovered) {
     hint = `Pressione E — ${hovered.label}`;
   } else if (hoveredNpc) {
     hint = `Pressione E para falar com ${hoveredNpc.displayName}`;
+  } else if (nearMegaphone) {
+    hint = 'Pressione E para convocar a assembleia de bairro 📢';
   } else if (nearEntranceOwner) {
     hint = `Pressione E para entrar no hub de ${nearEntranceOwner}`;
   } else if (nearExit) {
@@ -1735,6 +2000,18 @@ function updateInteraction() {
     } else if (hubPanelsController.isGuestbookOpen) {
       hubPanelsController.closeGuestbook();
       resumeAfterUI();
+    } else if (hoveredDebris) {
+      // E press on debris now opens the minigame instead of single-tick repair
+      const isGhost = !!network.room?.state.players.get(network.sessionId)?.isGhost;
+      if (!isGhost) {
+        releasePointerForUI();
+        minigameEl.onSuccess = (debrisId, kind) => {
+          network.sendMinigameComplete(debrisId, kind);
+          resumeAfterUI();
+        };
+        minigameEl.onCancel = () => resumeAfterUI();
+        minigameEl.open(hoveredDebris.id, hoveredDebris.kind);
+      }
     } else if (hovered) {
       if (hovered.post.type === 'guestbook') {
         hubPanelsController.openGuestbook();
@@ -1743,6 +2020,8 @@ function updateInteraction() {
       }
     } else if (hoveredNpc) {
       openNpcPanel(hoveredNpc);
+    } else if (nearMegaphone) {
+      network.sendCallMeeting();
     } else if (mode === 'plaza' && nearEntranceOwner) {
       enterHub(nearEntranceOwner);
     } else if (mode === 'hub' && nearExit) {
@@ -1772,6 +2051,20 @@ function animate(timestamp: number) {
   requestAnimationFrame(animate);
   timer.update(timestamp);
   const delta = Math.min(timer.getDelta(), 0.1);
+
+  // Smoothly dim sun/sky lighting during Saboteur solar blackouts
+  // Players with Lanterna Ecológica are immune — skip the vignette for them
+  const isBlackout = network.room?.state.blackoutTimer && network.room.state.blackoutTimer > 0;
+  const lanternaActive = !!localSelfState?.lanternaEcologica;
+  const targetSun = isBlackout && !lanternaActive ? 0.2 : 2.2;
+  const targetSky = isBlackout && !lanternaActive ? 0.15 : 0.9;
+  sun.intensity += (targetSun - sun.intensity) * 2 * delta;
+  sky.intensity += (targetSky - sky.intensity) * 2 * delta;
+  if (isBlackout && !lanternaActive) {
+    blackoutViggnetteEl.classList.add('active');
+  } else {
+    blackoutViggnetteEl.classList.remove('active');
+  }
 
   fpsFrameCount++;
   fpsAccum += delta;
@@ -1925,6 +2218,8 @@ const gmController = initGmController({
   onSpawnBoss: onGmSpawnBoss,
   onClearEnemies: onGmClearEnemies,
   onRespawn: onGmRespawn,
+  onStartMutirao: () => network.sendStartGame(),
+  onForceMutirao: () => network.sendGmForceStart(),
 
   resumeRadio: () => RadioManager.getInstance().resume(),
   refreshPermissions: refreshGmPermissionsTab,

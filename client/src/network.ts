@@ -10,6 +10,9 @@ export interface RemotePlayerState {
   rotY: number;
   mode: string;
   hubId: string;
+  role: string;
+  isGhost: boolean;
+  voteTarget: string;
 }
 
 export interface ChatEvent {
@@ -52,6 +55,11 @@ export interface SelfState {
   sucos: number;
   reinforcedChinelo: boolean;
   dead: boolean;
+  role: string;
+  isGhost: boolean;
+  superVassoura: boolean;
+  lanternaEcologica: boolean;
+  hasDetector: boolean;
 }
 
 export interface PickupNetState {
@@ -60,6 +68,16 @@ export interface PickupNetState {
   y: number;
   z: number;
   value: number;
+}
+
+export interface DebrisNetState {
+  id: string;
+  kind: string;
+  x: number;
+  y: number;
+  z: number;
+  progress: number;
+  status: string;
 }
 
 export interface AttackVisualEvent {
@@ -119,7 +137,11 @@ export interface BossEvent {
 
 export class Network {
   private client: Client;
-  private room: Room | null = null;
+  private _room: Room | null = null;
+  /** Read-only access to the underlying Colyseus room (state, sessionId). */
+  get room(): Room | null {
+    return this._room;
+  }
   sessionId = '';
 
   onPlayerAdd: (sessionId: string, state: RemotePlayerState) => void = () => {};
@@ -138,7 +160,18 @@ export class Network {
   onPickupAdd: (pickupId: string, state: PickupNetState) => void = () => {};
   onPickupChange: (pickupId: string, state: PickupNetState) => void = () => {};
   onPickupRemove: (pickupId: string) => void = () => {};
+  onDebrisAdd: (debrisId: string, state: DebrisNetState) => void = () => {};
+  onDebrisChange: (debrisId: string, state: DebrisNetState) => void = () => {};
+  onDebrisRemove: (debrisId: string) => void = () => {};
+  onGameStateChange: (gameState: string) => void = () => {};
+  onGameTimerChange: (gameTimer: number) => void = () => {};
   onSelfChange: (state: SelfState) => void = () => {};
+  onMeetingStateChange: (meetingState: string) => void = () => {};
+  onMeetingTimerChange: (meetingTimer: number) => void = () => {};
+  onBlackoutTimerChange: (blackoutTimer: number) => void = () => {};
+  onTeleport: (pos: { x: number; y: number; z: number }) => void = () => {};
+  onRoleAssignment: (role: string) => void = () => {};
+  onDetectorResult: (sector: string) => void = () => {};
   onAttackVisual: (event: AttackVisualEvent) => void = () => {};
   onEnemyHit: (event: EnemyHitEvent) => void = () => {};
   onEnemyDied: (event: EnemyDiedEvent) => void = () => {};
@@ -155,12 +188,12 @@ export class Network {
 
   async connect(name: string): Promise<void> {
     log('info', `connecting to multiplayer server as "${name}"`);
-    this.room = await this.client.joinOrCreate('plaza', { name });
-    this.sessionId = this.room.sessionId;
-    log('info', `connected — sessionId=${this.sessionId} room=${this.room.roomId}`);
+    this._room = await this.client.joinOrCreate('plaza', { name });
+    this.sessionId = this._room.sessionId;
+    log('info', `connected — sessionId=${this.sessionId} room=${this._room.roomId}`);
 
-    const $ = getStateCallbacks(this.room);
-    const state = this.room.state as any;
+    const $ = getStateCallbacks(this._room);
+    const state = this._room.state as any;
 
     // NOTE: the browser build of colyseus.js does not fire onAdd for entries
     // that already existed in the room state before we joined (the Node build
@@ -230,66 +263,101 @@ export class Network {
       this.onPickupRemove(pickupId);
     });
 
+    const seenDebris = new Set<string>();
+    const handleDebrisAdd = (debris: any, debrisId: string) => {
+      if (seenDebris.has(debrisId)) return;
+      seenDebris.add(debrisId);
+      this.onDebrisAdd(debrisId, toDebrisState(debris));
+      $(debris).onChange(() => {
+        this.onDebrisChange(debrisId, toDebrisState(debris));
+      });
+    };
+
+    $(state).debris.onAdd(handleDebrisAdd);
+
+    $(state).debris.onRemove((_debris: any, debrisId: string) => {
+      seenDebris.delete(debrisId);
+      this.onDebrisRemove(debrisId);
+    });
+
+    this._room.onStateChange((s: any) => {
+      if (s.gameState !== undefined) this.onGameStateChange(s.gameState);
+      if (s.gameTimer !== undefined) this.onGameTimerChange(s.gameTimer);
+      if (s.meetingState !== undefined) this.onMeetingStateChange(s.meetingState);
+      if (s.meetingTimer !== undefined) this.onMeetingTimerChange(s.meetingTimer);
+      if (s.blackoutTimer !== undefined) this.onBlackoutTimerChange(s.blackoutTimer);
+    });
+
     // Replay whatever was already in the plaza when we arrived. The initial
     // full state isn't guaranteed to be decoded yet at the instant join()
     // resolves (nested maps can still be undefined for a tick), so wait for
     // the first onStateChange rather than reading state.players/.enemies
     // synchronously here — reading too early is what was crashing connect().
-    this.room.onStateChange.once((s: any) => {
+    this._room.onStateChange.once((s: any) => {
       s.players?.forEach((player: any, sessionId: string) => handlePlayerAdd(player, sessionId));
       s.enemies?.forEach((enemy: any, enemyId: string) => handleEnemyAdd(enemy, enemyId));
       s.pickups?.forEach((pickup: any, pickupId: string) => handlePickupAdd(pickup, pickupId));
+      s.debris?.forEach((debris: any, debrisId: string) => handleDebrisAdd(debris, debrisId));
     });
 
-    this.room.onMessage('attack_visual', (data: AttackVisualEvent) => this.onAttackVisual(data));
-    this.room.onMessage('enemy_hit', (data: EnemyHitEvent) => this.onEnemyHit(data));
-    this.room.onMessage('enemy_died', (data: EnemyDiedEvent) => this.onEnemyDied(data));
-    this.room.onMessage('player_hit', (data: PlayerHitEvent) => this.onPlayerHit(data));
-    this.room.onMessage('bonk', (data: BonkEvent) => this.onBonk(data));
-    this.room.onMessage('died', (data: { respawnInMs: number }) =>
+    this._room.onMessage('attack_visual', (data: AttackVisualEvent) => this.onAttackVisual(data));
+    this._room.onMessage('enemy_hit', (data: EnemyHitEvent) => this.onEnemyHit(data));
+    this._room.onMessage('enemy_died', (data: EnemyDiedEvent) => this.onEnemyDied(data));
+    this._room.onMessage('player_hit', (data: PlayerHitEvent) => this.onPlayerHit(data));
+    this._room.onMessage('bonk', (data: BonkEvent) => this.onBonk(data));
+    this._room.onMessage('died', (data: { respawnInMs: number }) =>
       this.onDied(data.respawnInMs ?? 3000)
     );
-    this.room.onMessage('respawned', () => this.onRespawned());
-    this.room.onMessage('shop_purchase_result', (data: ShopPurchaseResultEvent) =>
+    this._room.onMessage('respawned', () => this.onRespawned());
+    this._room.onMessage('teleport', (pos: { x: number; y: number; z: number }) =>
+      this.onTeleport(pos)
+    );
+    this._room.onMessage('role_assignment', (data: { role: string }) =>
+      this.onRoleAssignment(data.role)
+    );
+    this._room.onMessage('shop_purchase_result', (data: ShopPurchaseResultEvent) =>
       this.onShopPurchaseResult(data)
     );
-    this.room.onMessage('boss_event', (data: BossEvent) => this.onBossEvent(data));
+    this._room.onMessage('boss_event', (data: BossEvent) => this.onBossEvent(data));
 
-    this.room.onMessage('chat', (data: ChatEvent) => this.onChat(data));
-    this.room.onMessage('system', (data: { text: string }) => this.onSystem(data.text));
-    this.room.onMessage('hub_added', (data: HubAddedEvent) => this.onHubAdded(data));
-    this.room.onMessage('object_placed', (data: PlacedObjectRecord) => this.onObjectPlaced(data));
-    this.room.onMessage('object_removed', (data: { id: string }) => this.onObjectRemoved(data.id));
-    this.room.onMessage('objects_cleared', () => this.onObjectsCleared());
+    this._room.onMessage('chat', (data: ChatEvent) => this.onChat(data));
+    this._room.onMessage('system', (data: { text: string }) => this.onSystem(data.text));
+    this._room.onMessage('hub_added', (data: HubAddedEvent) => this.onHubAdded(data));
+    this._room.onMessage('object_placed', (data: PlacedObjectRecord) => this.onObjectPlaced(data));
+    this._room.onMessage('object_removed', (data: { id: string }) => this.onObjectRemoved(data.id));
+    this._room.onMessage('objects_cleared', () => this.onObjectsCleared());
+    this._room.onMessage('detector_result', (data: { sector: string }) =>
+      this.onDetectorResult(data.sector)
+    );
 
-    this.room.onLeave((code: number) => {
+    this._room.onLeave((code: number) => {
       log('warn', `disconnected from server (code=${code})`);
       this.onDisconnected(`code ${code}`);
     });
 
-    this.room.onError((code: number, message?: string) => {
+    this._room.onError((code: number, message?: string) => {
       log('error', `room error (code=${code}): ${message ?? 'unknown'}`);
     });
   }
 
   sendMove(x: number, y: number, z: number, rotY: number, mode: string, hubId: string) {
-    this.room?.send('move', { x, y, z, rotY, mode, hubId });
+    this._room?.send('move', { x, y, z, rotY, mode, hubId });
   }
 
   sendChat(text: string) {
-    this.room?.send('chat', { text });
+    this._room?.send('chat', { text });
   }
 
   sendObjectPlaced(obj: PlacedObjectRecord) {
-    this.room?.send('object_placed', obj);
+    this._room?.send('object_placed', obj);
   }
 
   sendObjectRemoved(id: string) {
-    this.room?.send('object_removed', { id });
+    this._room?.send('object_removed', { id });
   }
 
   sendObjectsCleared() {
-    this.room?.send('objects_cleared');
+    this._room?.send('objects_cleared');
   }
 
   sendAttack(
@@ -301,27 +369,59 @@ export class Network {
     dy: number,
     dz: number
   ) {
-    this.room?.send('attack', { weapon, ox, oy, oz, dx, dy, dz });
+    this._room?.send('attack', { weapon, ox, oy, oz, dx, dy, dz });
   }
 
   sendGmSpawnEnemy(kind: 'mosquito' | 'barata' | 'pombo' = 'mosquito') {
-    this.room?.send('gm_spawn_enemy', { kind });
+    this._room?.send('gm_spawn_enemy', { kind });
   }
 
   sendGmClearEnemies() {
-    this.room?.send('gm_clear_enemies');
+    this._room?.send('gm_clear_enemies');
   }
 
   sendGmSpawnBoss() {
-    this.room?.send('gm_spawn_boss');
+    this._room?.send('gm_spawn_boss');
   }
 
   sendShopPurchase(item: 'chinelo_reforcado' | 'repelente' | 'suco_laranja') {
-    this.room?.send('shop_purchase', { item });
+    this._room?.send('shop_purchase', { item });
   }
 
   sendUseItem(item: 'suco_laranja') {
-    this.room?.send('use_item', { item });
+    this._room?.send('use_item', { item });
+  }
+
+  sendStartGame() {
+    this._room?.send('start_game');
+  }
+
+  sendRepairTick(id: string) {
+    this._room?.send('repair_tick', { id });
+  }
+
+  sendGmForceStart() {
+    this._room?.send('gm_force_start');
+  }
+
+  sendCallMeeting() {
+    this._room?.send('call_meeting');
+  }
+
+  sendCastVote(targetId: string) {
+    this._room?.send('cast_vote', { targetId });
+  }
+
+  sendSabotage(type: string) {
+    this._room?.send('sabotage', { type });
+  }
+
+  sendMinigameComplete(debrisId: string, kind: string) {
+    this._room?.send('minigame_complete', { id: debrisId, kind });
+  }
+
+  sendUseDetector() {
+    this._room?.send('use_detector');
   }
 }
 
@@ -334,6 +434,9 @@ function toState(player: any): RemotePlayerState {
     rotY: player.rotY,
     mode: player.mode,
     hubId: player.hubId,
+    role: player.role,
+    isGhost: player.isGhost,
+    voteTarget: player.voteTarget,
   };
 }
 
@@ -349,6 +452,11 @@ function toSelfState(player: any): SelfState {
     sucos: player.sucos,
     reinforcedChinelo: player.reinforcedChinelo,
     dead: player.dead,
+    role: player.role,
+    isGhost: player.isGhost,
+    superVassoura: player.superVassoura,
+    lanternaEcologica: player.lanternaEcologica,
+    hasDetector: player.hasDetector,
   };
 }
 
@@ -372,5 +480,17 @@ function toPickupState(pickup: any): PickupNetState {
     y: pickup.y,
     z: pickup.z,
     value: pickup.value,
+  };
+}
+
+function toDebrisState(debris: any): DebrisNetState {
+  return {
+    id: debris.id,
+    kind: debris.kind,
+    x: debris.x,
+    y: debris.y,
+    z: debris.z,
+    progress: debris.progress,
+    status: debris.status,
   };
 }

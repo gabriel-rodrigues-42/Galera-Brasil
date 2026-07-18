@@ -8,6 +8,8 @@ import {
   GM_CLEAR_ENEMIES,
   GM_RESPAWN,
   GM_PLACED_DELETE,
+  GM_START_MUTIRAO,
+  GM_FORCE_MUTIRAO,
   type EnemyKind,
   type RespawnTarget,
 } from '../events';
@@ -218,6 +220,14 @@ export class GmBuilderTab extends HTMLElement {
       </div>
 
       <div class="section-row">
+        <h3>Mutirão da Praça</h3>
+        <div class="buttons-row">
+          <button type="button" class="action-btn-mini primary" data-start-mutirao>🏁 Iniciar</button>
+          <button type="button" class="action-btn-mini danger" data-force-mutirao>⚡ Forçar (Dev)</button>
+        </div>
+      </div>
+
+      <div class="section-row">
         <h3>Respawnadores Globais</h3>
         <div class="buttons-row">
           <button type="button" class="action-btn-mini" data-respawn="npcs">🤖 NPCs</button>
@@ -272,6 +282,14 @@ export class GmBuilderTab extends HTMLElement {
 
     this.shadowRoot!.querySelector('[data-clear-enemies]')!.addEventListener('click', () => {
       this.dispatchEvent(new CustomEvent(GM_CLEAR_ENEMIES, { bubbles: true, composed: true }));
+    });
+
+    this.shadowRoot!.querySelector('[data-start-mutirao]')!.addEventListener('click', () => {
+      this.dispatchEvent(new CustomEvent(GM_START_MUTIRAO, { bubbles: true, composed: true }));
+    });
+
+    this.shadowRoot!.querySelector('[data-force-mutirao]')!.addEventListener('click', () => {
+      this.dispatchEvent(new CustomEvent(GM_FORCE_MUTIRAO, { bubbles: true, composed: true }));
     });
 
     this.shadowRoot!.querySelectorAll<HTMLButtonElement>('[data-respawn]').forEach((btn) => {

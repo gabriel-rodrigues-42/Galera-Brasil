@@ -880,3 +880,17 @@ body.bite-shake #app {
 }
 
 /* --- (guestbook-panel CSS moved to component shadow DOM) --- */
+
+#blackout-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-hud);
+  pointer-events: none;
+  background: radial-gradient(circle, transparent 35%, rgba(0, 0, 0, 0.95) 90%);
+  mix-blend-mode: multiply;
+  transition: opacity 1.2s ease-in-out;
+  opacity: 0;
+}
+#blackout-vignette.active {
+  opacity: 1;
+}

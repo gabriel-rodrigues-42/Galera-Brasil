@@ -217,6 +217,11 @@ export class CombatManager {
         this.deps.network.sendUseItem('suco_laranja');
         return;
       }
+      if (e.code === 'Digit4') {
+        if (!this.deps.canAttack()) return;
+        this.deps.network.sendUseDetector();
+        return;
+      }
       if (!this.deps.canSwitch()) return;
       if (e.code === 'Digit1') this.setWeapon('vassoura');
       if (e.code === 'Digit2') this.setWeapon('chinelo');

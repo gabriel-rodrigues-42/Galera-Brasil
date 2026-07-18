@@ -31,9 +31,25 @@ export class PickupState extends Schema {
   @type('number') value = 1;
 }
 
+export class DebrisState extends Schema {
+  @type('string') id = '';
+  @type('string') kind = 'lixo'; // 'lixo' | 'placa' | 'vitoria_regia' | 'mato'
+  @type('number') x = 0;
+  @type('number') y = 0;
+  @type('number') z = 0;
+  @type('number') progress = 0; // 0 to 100
+  @type('string') status = 'dirty'; // 'dirty' | 'cleared'
+}
+
 export type WeaponId = 'vassoura' | 'chinelo';
 export type EnemyKind = 'mosquito' | 'barata' | 'pombo';
-type ShopItemId = 'chinelo_reforcado' | 'repelente' | 'suco_laranja';
+type ShopItemId =
+  | 'chinelo_reforcado'
+  | 'repelente'
+  | 'suco_laranja'
+  | 'super_vassoura'
+  | 'lanterna_ecologica'
+  | 'detector';
 
 export interface AttackMessage {
   weapon?: string;
@@ -51,6 +67,11 @@ export interface ShopPurchaseMessage {
 
 export interface UseItemMessage {
   item?: string;
+}
+
+export interface MinigameCompleteMessage {
+  id?: string;
+  kind?: string;
 }
 
 // --- Tuning ---------------------------------------------------------------------
@@ -110,6 +131,9 @@ const SHOP_PRICES: Record<ShopItemId, number> = {
   chinelo_reforcado: 45,
   repelente: 20,
   suco_laranja: 12,
+  super_vassoura: 30,
+  lanterna_ecologica: 25,
+  detector: 20,
 };
 
 // NOTE: mirrored by hand in client/src/hud.ts — keep the curve in sync.
@@ -185,7 +209,14 @@ function toEnemyKind(value: string | undefined): EnemyKind | null {
 }
 
 function toShopItem(value: string | undefined): ShopItemId | null {
-  if (value === 'chinelo_reforcado' || value === 'repelente' || value === 'suco_laranja') {
+  if (
+    value === 'chinelo_reforcado' ||
+    value === 'repelente' ||
+    value === 'suco_laranja' ||
+    value === 'super_vassoura' ||
+    value === 'lanterna_ecologica' ||
+    value === 'detector'
+  ) {
     return value;
   }
   return null;
@@ -205,6 +236,10 @@ export class CombatSystem {
   private persistentSpawns = new Map<string, { kind: string; x: number; z: number }>();
   private pendingRespawns: { id: string; kind: string; x: number; z: number; respawnAt: number }[] =
     [];
+
+  public playerRoles = new Map<string, 'trabalhador' | 'sabotador'>();
+  private lastSabotageX = 0;
+  private lastSabotageZ = 0;
 
   constructor(readonly room: PlazaRoom) {
     this.boss = new BossController(this);
@@ -311,21 +346,53 @@ export class CombatSystem {
   update(dtMs: number) {
     const dt = Math.min(dtMs, 250) / 1000;
     this.elapsed += dt;
-    this.updateSpawner(dtMs);
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
     this.updatePickups();
     this.boss.update(dt, dtMs);
 
-    // Process pending respawns for persistent monsters
-    const now = Date.now();
-    for (let i = this.pendingRespawns.length - 1; i >= 0; i--) {
-      const respawn = this.pendingRespawns[i];
-      if (now >= respawn.respawnAt) {
-        if (this.persistentSpawns.has(respawn.id)) {
-          this.spawnPersistentEnemy(respawn.id, respawn.kind, respawn.x, respawn.z);
+    if (this.room.state.blackoutTimer > 0) {
+      this.room.state.blackoutTimer = Math.max(0, this.room.state.blackoutTimer - dt);
+    }
+
+    if (this.room.state.gameState === 'playing') {
+      if (this.room.state.meetingState !== 'none') {
+        const nextMeetingTimer = Math.max(0, this.room.state.meetingTimer - dt);
+        this.room.state.meetingTimer = nextMeetingTimer;
+        if (nextMeetingTimer <= 0) {
+          if (this.room.state.meetingState === 'discussion') {
+            this.room.state.meetingState = 'voting';
+            this.room.state.meetingTimer = 20; // 20s voting phase
+            this.room.broadcast('system', {
+              text: '🗳️ Fase de votação iniciada! Clique nos cartões dos jogadores para votar.',
+            });
+          } else if (this.room.state.meetingState === 'voting') {
+            this.tallyVotes();
+          }
         }
-        this.pendingRespawns.splice(i, 1);
+      } else {
+        const nextTimer = Math.max(0, this.room.state.gameTimer - dt);
+        this.room.state.gameTimer = nextTimer;
+        if (nextTimer <= 0) {
+          this.endGame(false);
+        }
+
+        // Check if saboteurs outnumber workers
+        this.checkWinConditions();
+      }
+    } else {
+      this.updateSpawner(dtMs);
+
+      // Process pending respawns for persistent monsters
+      const now = Date.now();
+      for (let i = this.pendingRespawns.length - 1; i >= 0; i--) {
+        const respawn = this.pendingRespawns[i];
+        if (now >= respawn.respawnAt) {
+          if (this.persistentSpawns.has(respawn.id)) {
+            this.spawnPersistentEnemy(respawn.id, respawn.kind, respawn.x, respawn.z);
+          }
+          this.pendingRespawns.splice(i, 1);
+        }
       }
     }
   }
@@ -514,6 +581,65 @@ export class CombatSystem {
         item,
         reason: 'not_enough_coins',
         message: 'Moedas insuficientes.',
+      });
+      return;
+    }
+
+    if (item === 'super_vassoura') {
+      if (player.superVassoura) {
+        client.send('shop_purchase_result', {
+          success: false,
+          item,
+          reason: 'already_owned',
+          message: 'Você já possui a Super Vassoura.',
+        });
+        return;
+      }
+      player.coins -= price;
+      player.superVassoura = true;
+      client.send('shop_purchase_result', {
+        success: true,
+        item,
+        message: '🧹 Super Vassoura equipada! Limpeza 25% mais rápida!',
+        coins: player.coins,
+      });
+      return;
+    } else if (item === 'lanterna_ecologica') {
+      if (player.lanternaEcologica) {
+        client.send('shop_purchase_result', {
+          success: false,
+          item,
+          reason: 'already_owned',
+          message: 'Você já possui a Lanterna Ecológica.',
+        });
+        return;
+      }
+      player.coins -= price;
+      player.lanternaEcologica = true;
+      client.send('shop_purchase_result', {
+        success: true,
+        item,
+        message: '🔦 Lanterna Ecológica ativa! Imune ao Apagão Solar!',
+        coins: player.coins,
+      });
+      return;
+    } else if (item === 'detector') {
+      if (player.hasDetector) {
+        client.send('shop_purchase_result', {
+          success: false,
+          item,
+          reason: 'already_owned',
+          message: 'Você já possui o Detector de Sabotagem.',
+        });
+        return;
+      }
+      player.coins -= price;
+      player.hasDetector = true;
+      client.send('shop_purchase_result', {
+        success: true,
+        item,
+        message: '📡 Detector de Sabotagem equipado! Use com a tecla 4.',
+        coins: player.coins,
       });
       return;
     }
@@ -1022,5 +1148,402 @@ export class CombatSystem {
       const brain = this.brains.get(id);
       if (brain) brain.state = 'wander';
     });
+  }
+
+  // --- Mutirão Game Mode (Release 3.0) --------------------------------------
+
+  startGame(force = false) {
+    if (this.room.state.gameState === 'playing') return;
+
+    if (!force && this.room.state.players.size < 6) {
+      this.room.broadcast('system', {
+        text: '🚨 O mutirão precisa de pelo menos 6 pessoas na praça para começar!',
+      });
+      return;
+    }
+
+    this.room.state.gameState = 'playing';
+    this.room.state.gameTimer = 180; // 3 minutes
+    this.room.state.debris.clear();
+    this.room.state.blackoutTimer = 0;
+    this.room.state.meetingState = 'none';
+    this.room.state.meetingTimer = 0;
+
+    // Reset player roles, ghost flags, and voting targets
+    this.playerRoles.clear();
+    this.room.state.players.forEach((p) => {
+      p.role = 'trabalhador';
+      p.isGhost = false;
+      p.voteTarget = '';
+      p.superVassoura = false;
+      p.lanternaEcologica = false;
+      p.hasDetector = false;
+    });
+
+    const sessionIds = Array.from(this.room.state.players.keys());
+    if (sessionIds.length > 0) {
+      // Shuffle players
+      const shuffled = [...sessionIds].sort(() => Math.random() - 0.5);
+
+      // Default: 1 Saboteur. 2 Saboteurs if 8+ players.
+      let numSaboteurs = 1;
+      if (sessionIds.length >= 8) {
+        numSaboteurs = 2;
+      }
+
+      const saboteurIds = shuffled.slice(0, numSaboteurs);
+      saboteurIds.forEach((sid) => {
+        const p = this.room.state.players.get(sid);
+        if (p) p.role = 'sabotador';
+        this.playerRoles.set(sid, 'sabotador');
+      });
+
+      shuffled.slice(numSaboteurs).forEach((sid) => {
+        this.playerRoles.set(sid, 'trabalhador');
+      });
+    }
+
+    // Send private role message to each client
+    this.room.clients.forEach((client) => {
+      const role = this.playerRoles.get(client.sessionId) || 'trabalhador';
+      client.send('role_assignment', { role });
+    });
+
+    const DEBRIS_LOCATIONS = [
+      { x: -3, y: 0.1, z: 3, kind: 'lixo' },
+      { x: 4, y: 0.1, z: -4, kind: 'lixo' },
+      { x: -5, y: 0.1, z: -2, kind: 'lixo' },
+      { x: -6, y: 0.1, z: 0.5, kind: 'placa' },
+      { x: 6, y: 0.1, z: -1.0, kind: 'placa' },
+      { x: 0.5, y: 0.1, z: 6, kind: 'placa' },
+      { x: -4, y: 0.1, z: -10, kind: 'mato' },
+      { x: 5, y: 0.1, z: -8, kind: 'mato' },
+      { x: -2, y: 0.02, z: -33, kind: 'vitoria_regia' },
+      { x: 2, y: 0.02, z: -37, kind: 'vitoria_regia' },
+      { x: 0, y: 0.02, z: -35, kind: 'vitoria_regia' },
+    ];
+
+    DEBRIS_LOCATIONS.forEach((loc, index) => {
+      const d = new DebrisState();
+      d.id = `debris_${index}_${Math.random().toString(36).slice(2, 7)}`;
+      d.kind = loc.kind;
+      d.x = loc.x;
+      d.y = loc.y;
+      d.z = loc.z;
+      d.progress = 0;
+      d.status = 'dirty';
+      this.room.state.debris.set(d.id, d);
+    });
+
+    this.room.broadcast('system', {
+      text: '🚨 O mutirão começou! Vamos limpar a praça antes que o tempo acabe!',
+    });
+  }
+
+  endGame(victory: boolean, textOverride?: string) {
+    this.room.state.gameState = victory ? 'victory' : 'defeat';
+
+    // Deactivate blackout and meetings
+    this.room.state.blackoutTimer = 0;
+    this.room.state.meetingState = 'none';
+
+    this.room.broadcast('system', {
+      text:
+        textOverride ||
+        (victory
+          ? '🎉 Vitória! A praça está limpa e restaurada! Todos receberam 50 moedas e 100 XP.'
+          : '⏰ O mutirão falhou! A praça continua bagunçada...'),
+    });
+
+    if (victory) {
+      this.room.state.players.forEach((player) => {
+        if (player.mode === 'plaza' && !player.dead) {
+          player.coins += 50;
+          this.awardXp(player, 100);
+        }
+      });
+    }
+
+    this.room.clock.setTimeout(() => {
+      this.room.state.gameState = 'idle';
+      this.room.state.gameTimer = 0;
+      this.room.state.debris.clear();
+    }, 8000);
+  }
+
+  handleRepairTick(client: Client, debrisId: string) {
+    if (this.room.state.gameState !== 'playing') return;
+
+    const player = this.room.state.players.get(client.sessionId);
+    if (!player || player.dead || player.mode !== 'plaza') return;
+
+    const debris = this.room.state.debris.get(debrisId);
+    if (!debris || debris.status === 'cleared') return;
+
+    const dist = Math.hypot(player.x - debris.x, player.z - debris.z);
+    if (dist > 4.5) return; // Allow small network variance
+
+    const tickAmount = player.superVassoura ? 3.75 : 2.5;
+    debris.progress = Math.min(100, debris.progress + tickAmount);
+    if (debris.progress >= 100) {
+      debris.status = 'cleared';
+      this.room.broadcast('system', {
+        text: `🧹 Um objeto do tipo "${debris.kind}" foi limpo por ${player.name}!`,
+      });
+
+      // Check win condition
+      let allCleared = true;
+      this.room.state.debris.forEach((d) => {
+        if (d.status !== 'cleared') allCleared = false;
+      });
+
+      if (allCleared) {
+        this.endGame(true);
+      }
+    }
+  }
+
+  handleMinigameComplete(client: Client, debrisId: string | undefined, _kind: string | undefined) {
+    if (this.room.state.gameState !== 'playing') return;
+    if (!debrisId) return;
+
+    const player = this.room.state.players.get(client.sessionId);
+    if (!player || player.dead || player.isGhost || player.mode !== 'plaza') return;
+
+    const debris = this.room.state.debris.get(debrisId);
+    if (!debris || debris.status === 'cleared') return;
+
+    const dist = Math.hypot(player.x - debris.x, player.z - debris.z);
+    if (dist > 6) return; // generous range for minigame completion
+
+    debris.progress = 100;
+    debris.status = 'cleared';
+
+    // Award bonus coins for minigame completion
+    player.coins += 5;
+
+    this.room.broadcast('system', {
+      text: `🎉 ${player.name} completou o mini-jogo e limpou o ${debris.kind}! (+5 moedas)`,
+    });
+
+    // Check win condition
+    let allCleared = true;
+    this.room.state.debris.forEach((d) => {
+      if (d.status !== 'cleared') allCleared = false;
+    });
+
+    if (allCleared) {
+      this.endGame(true);
+    }
+  }
+
+  handleUseDetector(client: Client) {
+    const player = this.room.state.players.get(client.sessionId);
+    if (!player || !player.hasDetector) return;
+
+    // Compute sector from last sabotage position
+    const angle = Math.atan2(this.lastSabotageZ, this.lastSabotageX) * (180 / Math.PI);
+    let sector: string;
+    if (angle >= -45 && angle < 45) {
+      sector = 'Leste';
+    } else if (angle >= 45 && angle < 135) {
+      sector = 'Sul';
+    } else if (angle >= 135 || angle < -135) {
+      sector = 'Oeste';
+    } else {
+      sector = 'Norte';
+    }
+
+    client.send('detector_result', { sector });
+  }
+
+  handleCallMeeting(client: Client) {
+    if (this.room.state.gameState !== 'playing') return;
+    if (this.room.state.meetingState !== 'none') return;
+
+    const caller = this.room.state.players.get(client.sessionId);
+    if (!caller || caller.isGhost || caller.dead) return;
+
+    this.room.state.meetingState = 'discussion';
+    this.room.state.meetingTimer = 30; // 30s discussion timer
+
+    this.room.state.players.forEach((p) => {
+      p.voteTarget = '';
+    });
+
+    const activeClients: Client[] = [];
+    this.room.clients.forEach((c) => {
+      const p = this.room.state.players.get(c.sessionId);
+      if (p && !p.isGhost) {
+        activeClients.push(c);
+      }
+    });
+
+    const numPlayers = activeClients.length;
+    activeClients.forEach((c, index) => {
+      const angle = (index / numPlayers) * Math.PI * 2;
+      const x = Math.cos(angle) * 3;
+      const z = 8 + Math.sin(angle) * 3;
+      c.send('teleport', { x, y: 1.7, z });
+    });
+
+    this.room.broadcast('system', {
+      text: `📢 Assembleia de Bairro convocada por ${caller.name}! Teleportando todos à praça para debater.`,
+    });
+  }
+
+  handleCastVote(client: Client, targetId: string) {
+    if (this.room.state.gameState !== 'playing') return;
+    if (this.room.state.meetingState !== 'voting') return;
+
+    const player = this.room.state.players.get(client.sessionId);
+    if (!player || player.isGhost) return;
+
+    if (targetId !== 'skip' && !this.room.state.players.has(targetId)) return;
+
+    player.voteTarget = targetId;
+
+    this.room.broadcast('system', {
+      text: `🗳️ ${player.name} votou!`,
+    });
+
+    let allVoted = true;
+    this.room.state.players.forEach((p) => {
+      if (!p.isGhost && p.voteTarget === '') {
+        allVoted = false;
+      }
+    });
+
+    if (allVoted) {
+      this.tallyVotes();
+    }
+  }
+
+  handleSabotage(client: Client, type: string) {
+    if (this.room.state.gameState !== 'playing') return;
+    if (this.room.state.meetingState !== 'none') return;
+
+    const player = this.room.state.players.get(client.sessionId);
+    if (!player || player.isGhost || player.dead) return;
+
+    const role = this.playerRoles.get(client.sessionId);
+    if (role !== 'sabotador') return;
+
+    this.lastSabotageX = player.x;
+    this.lastSabotageZ = player.z;
+
+    if (type === 'blackout') {
+      this.room.state.blackoutTimer = 25; // 25s blackout
+      this.room.state.players.forEach((p, sid) => {
+        if (!p.lanternaEcologica) {
+          this.room.clients.find((c) => c.sessionId === sid)?.send('blackout_active', {});
+        }
+      });
+      this.room.broadcast('system', {
+        text: '⚠️ APAGÃO SOLAR! Os painéis foram sabotados e a iluminação caiu!',
+      });
+    } else if (type === 'infestation') {
+      for (let i = 0; i < 3; i++) {
+        this.spawnMosquito();
+      }
+      this.room.broadcast('system', {
+        text: '⚠️ INFESTAÇÃO! Uma nuvem de mosquitos mutantes invadiu a praça!',
+      });
+    } else if (type === 'breakage') {
+      const clearedDebris: DebrisState[] = [];
+      this.room.state.debris.forEach((d) => {
+        if (d.status === 'cleared') {
+          clearedDebris.push(d);
+        }
+      });
+
+      if (clearedDebris.length > 0) {
+        const target = clearedDebris[Math.floor(Math.random() * clearedDebris.length)];
+        target.progress = 0;
+        target.status = 'dirty';
+        this.room.broadcast('system', {
+          text: `⚠️ SABOTAGEM! Um objeto do tipo "${target.kind}" foi danificado novamente!`,
+        });
+      } else {
+        client.send('system', { text: 'Nenhum painel ou objeto limpo disponível para quebrar.' });
+      }
+    }
+  }
+
+  tallyVotes() {
+    if (this.room.state.gameState !== 'playing') return;
+
+    const votes = new Map<string, number>();
+    let skipCount = 0;
+
+    this.room.state.players.forEach((p) => {
+      if (!p.isGhost) {
+        const target = p.voteTarget;
+        if (target === 'skip' || target === '') {
+          skipCount++;
+        } else {
+          votes.set(target, (votes.get(target) || 0) + 1);
+        }
+      }
+    });
+
+    let highestTarget = '';
+    let highestVotes = 0;
+    let isTie = false;
+
+    votes.forEach((count, target) => {
+      if (count > highestVotes) {
+        highestVotes = count;
+        highestTarget = target;
+        isTie = false;
+      } else if (count === highestVotes) {
+        isTie = true;
+      }
+    });
+
+    if (skipCount >= highestVotes || isTie || highestVotes === 0) {
+      this.room.broadcast('system', {
+        text: '🗳️ Votação encerrada! A maioria decidiu pular ou houve empate. Ninguém foi remanejado.',
+      });
+    } else {
+      const ejectedPlayer = this.room.state.players.get(highestTarget);
+      if (ejectedPlayer) {
+        ejectedPlayer.isGhost = true;
+        const role = this.playerRoles.get(highestTarget) || 'trabalhador';
+
+        this.room.broadcast('system', {
+          text: `🗳️ Votação encerrada! ${ejectedPlayer.name} foi remanejado(a) e virou fantasma. Papel: ${role.toUpperCase()}`,
+        });
+      }
+    }
+
+    this.room.state.players.forEach((p) => {
+      p.voteTarget = '';
+    });
+    this.room.state.meetingState = 'none';
+    this.room.state.meetingTimer = 0;
+
+    this.checkWinConditions();
+  }
+
+  checkWinConditions() {
+    if (this.room.state.gameState !== 'playing') return;
+
+    let activeWorkers = 0;
+    let activeSaboteurs = 0;
+    this.room.state.players.forEach((p, sessionId) => {
+      if (!p.isGhost) {
+        const role = this.playerRoles.get(sessionId) || 'trabalhador';
+        if (role === 'sabotador') {
+          activeSaboteurs++;
+        } else {
+          activeWorkers++;
+        }
+      }
+    });
+
+    if (activeSaboteurs > 0 && activeWorkers <= activeSaboteurs) {
+      this.endGame(false, '😈 Vitória dos Sabotadores! Eles sabotaram o mutirão com sucesso.');
+    }
   }
 }

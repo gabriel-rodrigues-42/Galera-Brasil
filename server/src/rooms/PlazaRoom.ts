@@ -5,9 +5,11 @@ import {
   CombatSystem,
   EnemyState,
   PickupState,
+  DebrisState,
   AttackMessage,
   ShopPurchaseMessage,
   UseItemMessage,
+  MinigameCompleteMessage,
 } from './combat';
 
 export class PlayerState extends Schema {
@@ -30,12 +32,24 @@ export class PlayerState extends Schema {
   @type('number') sucos = 0;
   @type('boolean') reinforcedChinelo = false;
   @type('boolean') dead = false;
+  @type('string') role = 'trabalhador'; // 'trabalhador' | 'sabotador'
+  @type('boolean') isGhost = false;
+  @type('string') voteTarget = ''; // session ID voted for, or empty/skip
+  @type('boolean') superVassoura = false;
+  @type('boolean') lanternaEcologica = false;
+  @type('boolean') hasDetector = false;
 }
 
 export class PlazaState extends Schema {
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
   @type({ map: EnemyState }) enemies = new MapSchema<EnemyState>();
   @type({ map: PickupState }) pickups = new MapSchema<PickupState>();
+  @type({ map: DebrisState }) debris = new MapSchema<DebrisState>();
+  @type('string') gameState = 'idle'; // 'idle' | 'lobby' | 'playing' | 'victory' | 'defeat'
+  @type('number') gameTimer = 0; // seconds remaining
+  @type('string') meetingState = 'none'; // 'none' | 'discussion' | 'voting'
+  @type('number') meetingTimer = 0; // seconds left in current meeting phase
+  @type('number') blackoutTimer = 0; // blackout remaining seconds
 }
 
 interface JoinOptions {
@@ -102,6 +116,38 @@ export class PlazaRoom extends Room<PlazaState> {
 
     this.onMessage('gm_spawn_boss', () => {
       this.combat.boss.gmSummon();
+    });
+
+    this.onMessage('start_game', () => {
+      this.combat.startGame();
+    });
+
+    this.onMessage('repair_tick', (client, message: { id: string }) => {
+      this.combat.handleRepairTick(client, message?.id);
+    });
+
+    this.onMessage('gm_force_start', () => {
+      this.combat.startGame(true);
+    });
+
+    this.onMessage('call_meeting', (client) => {
+      this.combat.handleCallMeeting(client);
+    });
+
+    this.onMessage('cast_vote', (client, message: { targetId: string }) => {
+      this.combat.handleCastVote(client, message?.targetId);
+    });
+
+    this.onMessage('sabotage', (client, message: { type: string }) => {
+      this.combat.handleSabotage(client, message?.type);
+    });
+
+    this.onMessage('minigame_complete', (client, message: MinigameCompleteMessage) => {
+      this.combat.handleMinigameComplete(client, message?.id, message?.kind);
+    });
+
+    this.onMessage('use_detector', (client) => {
+      this.combat.handleUseDetector(client);
     });
 
     this.onMessage('move', (client, message: MoveMessage) => {

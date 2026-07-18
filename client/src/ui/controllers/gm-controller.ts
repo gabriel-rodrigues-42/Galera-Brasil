@@ -15,6 +15,8 @@ import {
   GM_RESPAWN,
   GM_PLACED_DELETE,
   GM_TAB_CHANGE,
+  GM_START_MUTIRAO,
+  GM_FORCE_MUTIRAO,
   PANEL_CLOSE,
   RADIO_TOGGLE,
   RADIO_NEXT,
@@ -70,6 +72,8 @@ export interface GmControllerDeps {
   onSpawnBoss(): void;
   onClearEnemies(): void;
   onRespawn(target: RespawnTarget): void;
+  onStartMutirao(): void;
+  onForceMutirao(): void;
 
   resumeRadio(): void;
   refreshPermissions(): void;
@@ -200,6 +204,8 @@ export function initGmController(deps: GmControllerDeps): GmController {
 
   deps.builderTab.addEventListener(GM_SPAWN_BOSS, () => deps.onSpawnBoss());
   deps.builderTab.addEventListener(GM_CLEAR_ENEMIES, () => deps.onClearEnemies());
+  deps.builderTab.addEventListener(GM_START_MUTIRAO, () => deps.onStartMutirao());
+  deps.builderTab.addEventListener(GM_FORCE_MUTIRAO, () => deps.onForceMutirao());
 
   deps.builderTab.addEventListener(GM_RESPAWN, ((e: CustomEvent<GmRespawnDetail>) => {
     deps.onRespawn(e.detail.target);
