@@ -397,7 +397,9 @@ body.locked #crosshair {
 #interact-hint {
   position: absolute;
   left: 50%;
-  bottom: 14%;
+  /* Above the hotbar (bottom 110px + ~70px slots) so prompts never hide
+   * behind the weapon slots. */
+  bottom: 196px;
   transform: translateX(-50%);
   padding: 8px 16px;
   border-radius: 8px;
