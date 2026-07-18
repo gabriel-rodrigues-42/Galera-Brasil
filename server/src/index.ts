@@ -28,6 +28,17 @@ app.use(express.json());
 // --- Hub directory API (Phase 2: accounts + many hubs, no login — a hub is
 // just a name-keyed record, trusted within a small group of friends) --------
 
+let gmBypassWallLimits = false;
+
+app.get('/api/settings/gm-bypass', (_req, res) => {
+  res.json({ enabled: gmBypassWallLimits });
+});
+
+app.post('/api/settings/gm-bypass', (req, res) => {
+  gmBypassWallLimits = !!req.body.enabled;
+  res.json({ success: true, enabled: gmBypassWallLimits });
+});
+
 app.get('/api/hubs', (_req, res) => {
   res.json(listHubs());
 });
@@ -47,7 +58,10 @@ app.post('/api/hubs/:owner/posts', (req, res) => {
   if (!hub) return res.status(404).json({ error: 'unknown owner' });
 
   if (req.body.type === 'guestbook' && !hub.allowVisitorPosts) {
-    return res.status(403).json({ error: 'visitor posts disabled' });
+    const isGmBypass = req.body.isGm === true && gmBypassWallLimits === true;
+    if (!isGmBypass) {
+      return res.status(403).json({ error: 'visitor posts disabled' });
+    }
   }
 
   const post = addPost(req.params.owner, req.body);

@@ -42,6 +42,12 @@ const guestbookSettingsSectionEl = document.querySelector<HTMLDivElement>(
 )!;
 const guestbookAllowToggleEl = document.querySelector<HTMLInputElement>('#guestbook-allow-toggle')!;
 const guestbookPanelCloseEl = document.querySelector<HTMLButtonElement>('#guestbook-panel-close')!;
+const gmBypassGlobalToggleEl = document.querySelector<HTMLInputElement>(
+  '#gm-bypass-global-toggle'
+)!;
+const gmHubsPermissionsListEl = document.querySelector<HTMLDivElement>(
+  '#gm-hubs-permissions-list'
+)!;
 const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
 const debugBadgeEl = document.querySelector<HTMLButtonElement>('#debug-badge')!;
 const debugStatsEl = document.querySelector<HTMLPreElement>('#debug-stats')!;
@@ -641,6 +647,7 @@ joinFormEl.addEventListener('submit', (e) => {
     .then(() => {
       localStorage.setItem(SAVED_NAME_KEY, name);
       myName = name;
+      hubManager.setMyName(name);
       connected = true;
       // Server join broadcasts go to everyone EXCEPT the joiner, and there is
       // no chat history replay — seed a local line so the card never starts empty.
@@ -903,6 +910,13 @@ function openGmPanel() {
   releasePointerForUI();
   ghostGroup.visible = false; // Hide ghost when menu is open
   updatePlacedObjectsList();
+
+  const activeTabBtn = document.querySelector('.gm-tab-btn.active');
+  const activeTab = activeTabBtn ? activeTabBtn.getAttribute('data-tab') : '';
+  if (activeTab === 'permissions') {
+    refreshGmPermissionsTab();
+  }
+
   log('info', 'GM builder panel opened');
 }
 
@@ -1653,6 +1667,56 @@ function closeGuestbookPanel() {
   log('info', 'guestbook panel closed');
 }
 
+function refreshGmPermissionsTab() {
+  gmHubsPermissionsListEl.innerHTML = '<p class="gm-permissions-empty">Carregando...</p>';
+
+  api
+    .getGMBypass()
+    .then((res) => {
+      gmBypassGlobalToggleEl.checked = res.enabled;
+    })
+    .catch((err) => {
+      log('error', `Failed to get GM bypass state: ${err}`);
+    });
+
+  api
+    .listHubs()
+    .then((summaries) => {
+      if (summaries.length === 0) {
+        gmHubsPermissionsListEl.innerHTML =
+          '<p class="gm-permissions-empty">Nenhum hub registrado.</p>';
+        return;
+      }
+      return Promise.all(summaries.map((s) => api.getHub(s.owner)));
+    })
+    .then((hubs) => {
+      if (!hubs) return;
+
+      gmHubsPermissionsListEl.innerHTML = hubs
+        .map((hub) => {
+          const checked = hub.allowVisitorPosts ? 'checked' : '';
+          return `
+            <div class="gm-permissions-row" data-owner="${escapeHtml(hub.owner)}">
+              <div class="gm-permissions-row-info">
+                <span class="gm-permissions-row-owner">🏡 Hub de ${escapeHtml(hub.owner)}</span>
+                <span class="gm-permissions-row-slot">Slot: ${hub.slot} · Tag: ${escapeHtml(hub.tag)}</span>
+              </div>
+              <label class="guestbook-checkbox-label">
+                <input type="checkbox" class="gm-hub-allow-toggle" ${checked} />
+                <span>Permitir recados</span>
+              </label>
+            </div>
+          `;
+        })
+        .join('');
+    })
+    .catch((err) => {
+      log('error', `Failed to load GM permissions: ${err}`);
+      gmHubsPermissionsListEl.innerHTML =
+        '<p class="gm-permissions-empty">Erro ao carregar permissões.</p>';
+    });
+}
+
 function renderGuestbookComments(posts: Extract<HubPost, { type: 'guestbook' }>[]) {
   if (posts.length === 0) {
     guestbookEmptyHintEl.classList.remove('hidden');
@@ -1710,6 +1774,7 @@ guestbookFormEl.addEventListener('submit', (e) => {
       type: 'guestbook',
       author: myName,
       message,
+      isGm: true,
     })
     .then(() => {
       guestbookMessageInputEl.value = '';
@@ -2283,6 +2348,9 @@ tabButtons.forEach((btn) => {
     if (tabName === 'sound') {
       RadioManager.getInstance().resume();
     }
+    if (tabName === 'permissions') {
+      refreshGmPermissionsTab();
+    }
   });
 });
 
@@ -2432,6 +2500,42 @@ function drawVisualizer() {
   }
 }
 drawVisualizer();
+
+// --- GM Permissions Tab Listeners ---
+gmBypassGlobalToggleEl.addEventListener('change', () => {
+  const enabled = gmBypassGlobalToggleEl.checked;
+  api
+    .setGMBypass(enabled)
+    .then((res) => {
+      log('info', `GM Bypass Global set to ${res.enabled}`);
+    })
+    .catch((err) => {
+      log('error', `Failed to set GM Bypass Global: ${err}`);
+    });
+});
+
+gmHubsPermissionsListEl.addEventListener('change', (e) => {
+  const checkbox = e.target as HTMLInputElement;
+  if (!checkbox || !checkbox.classList.contains('gm-hub-allow-toggle')) return;
+
+  const row = checkbox.closest('.gm-permissions-row');
+  if (!row) return;
+
+  const owner = row.getAttribute('data-owner');
+  if (!owner) return;
+
+  const allowed = checkbox.checked;
+  api
+    .updateHubSettings(owner, allowed)
+    .then((res) => {
+      if (res.success) {
+        log('info', `GM updated settings for ${owner}: allow_visitor_posts = ${allowed}`);
+      }
+    })
+    .catch((err) => {
+      log('error', `GM failed to update settings for ${owner}: ${err}`);
+    });
+});
 
 log(
   'info',

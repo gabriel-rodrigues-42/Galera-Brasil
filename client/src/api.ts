@@ -15,7 +15,7 @@ export interface HubRecord extends HubSummary {
 export type NewPostInput =
   | { type: 'text'; title: string; body: string }
   | { type: 'link'; label: string; url: string; description: string }
-  | { type: 'guestbook'; author: string; message: string };
+  | { type: 'guestbook'; author: string; message: string; isGm?: boolean };
 
 function getApiBase(): string {
   // In Vite dev, the app can run on any free port (not just 5173), while the
@@ -60,7 +60,17 @@ export function reactToPost(postId: string, emoji: string): Promise<{ success: b
     body: JSON.stringify({ emoji }),
   });
 }
+export function getGMBypass(): Promise<{ enabled: boolean }> {
+  return apiFetch('/api/settings/gm-bypass');
+}
 
+export function setGMBypass(enabled: boolean): Promise<{ success: boolean; enabled: boolean }> {
+  return apiFetch('/api/settings/gm-bypass', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+}
 export function addPost(owner: string, post: NewPostInput): Promise<HubPost> {
   return apiFetch(`/api/hubs/${encodeURIComponent(owner)}/posts`, {
     method: 'POST',

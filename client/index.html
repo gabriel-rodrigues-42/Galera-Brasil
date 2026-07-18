@@ -228,6 +228,7 @@
             </button>
             <button type="button" class="gm-tab-btn" data-tab="shortcuts">⌨️ Atalhos</button>
             <button type="button" class="gm-tab-btn" data-tab="sound">🎵 Som & Rádio</button>
+            <button type="button" class="gm-tab-btn" data-tab="permissions">🔐 Permissões</button>
           </div>
 
           <!-- TAB 1: BUILDER -->
@@ -513,6 +514,22 @@
                     <button type="button" id="radio-btn-next" class="radio-ctrl-btn">⏭️</button>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 4: PERMISSIONS -->
+          <div id="gm-tab-content-permissions" class="gm-tab-pane">
+            <div class="gm-permissions-section">
+              <div class="gm-permissions-header">
+                <label class="guestbook-checkbox-label">
+                  <input type="checkbox" id="gm-bypass-global-toggle" />
+                  <span><strong>Bypass Global:</strong> GMs ignoram restrições de mural</span>
+                </label>
+              </div>
+              <h3>Permissões de Mural por Hub</h3>
+              <div id="gm-hubs-permissions-list" class="gm-permissions-list">
+                <p class="gm-permissions-empty">Carregando hubs...</p>
               </div>
             </div>
           </div>

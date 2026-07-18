@@ -67,9 +67,14 @@ export function disposeObject3D(root: THREE.Object3D) {
 export class HubManager {
   private scene: THREE.Scene;
   private hubs = new Map<string, HubFacade>();
+  private myName = '';
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+  }
+
+  setMyName(name: string) {
+    this.myName = name;
   }
 
   private ringPosition(slot: number): { x: number; z: number; angle: number } {
@@ -126,18 +131,6 @@ export class HubManager {
     return group;
   }
 
-  private makeBeacon(): THREE.Mesh {
-    return new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.35),
-      new THREE.MeshStandardMaterial({
-        color: 0xffcf5c,
-        emissive: 0xffcf5c,
-        emissiveIntensity: 0.8,
-        roughness: 0.3,
-      })
-    );
-  }
-
   addFacade(summary: api.HubSummary) {
     if (this.hubs.has(summary.owner)) return;
 
@@ -148,11 +141,23 @@ export class HubManager {
     facade.position.set(x, 0, z);
     this.scene.add(facade);
 
-    const beacon = this.makeBeacon();
+    const isMine = this.myName && summary.owner === this.myName;
+
+    const beacon = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.35),
+      new THREE.MeshStandardMaterial({
+        color: isMine ? 0xa7d94f : 0xffcf5c,
+        emissive: isMine ? 0xa7d94f : 0xffcf5c,
+        emissiveIntensity: 0.8,
+        roughness: 0.3,
+      })
+    );
     beacon.position.set(x, 3.6, z);
     this.scene.add(beacon);
 
-    const nameTexture = makeNameTagTexture(`Hub de ${summary.owner}`, '#ffcf5c');
+    const displayName = isMine ? `🏡 Meu Hub (${summary.owner})` : `Hub de ${summary.owner}`;
+    const nameColor = isMine ? '#a7d94f' : '#ffcf5c';
+    const nameTexture = makeNameTagTexture(displayName, nameColor);
     const nameSprite = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: nameTexture, depthTest: false })
     );
