@@ -13,7 +13,22 @@ import { PickupManager } from './pickup-manager';
 import { CombatManager } from './combat';
 import { Hud } from './hud';
 import * as api from './api';
+import { escapeHtml } from './ui/escape';
+import { registerUiComponents } from './ui';
+import type { GmBadge } from './ui/components/gm-badge';
+import type { GmPanel } from './ui/components/gm-panel';
+import type { GmBuilderTab, PlacedItemView } from './ui/components/gm-builder-tab';
+import type { GmSoundTab } from './ui/components/gm-sound-tab';
+import type { GmPermissionsTab, HubPermissionRow } from './ui/components/gm-permissions-tab';
+import type { BuilderStatus } from './ui/components/builder-status';
+import { initGmController } from './ui/controllers/gm-controller';
+import type { EnemyKind, RespawnTarget, VolumeChannel } from './ui/events';
+import { BUILD_TYPE_LABELS, type BuildType } from './ui/gm-catalog';
+import './ui/tokens.css';
+import './ui/fonts.css';
 import './style.css';
+
+registerUiComponents();
 
 installGlobalErrorLogging();
 log('info', 'main.ts starting');
@@ -42,12 +57,6 @@ const guestbookSettingsSectionEl = document.querySelector<HTMLDivElement>(
 )!;
 const guestbookAllowToggleEl = document.querySelector<HTMLInputElement>('#guestbook-allow-toggle')!;
 const guestbookPanelCloseEl = document.querySelector<HTMLButtonElement>('#guestbook-panel-close')!;
-const gmBypassGlobalToggleEl = document.querySelector<HTMLInputElement>(
-  '#gm-bypass-global-toggle'
-)!;
-const gmHubsPermissionsListEl = document.querySelector<HTMLDivElement>(
-  '#gm-hubs-permissions-list'
-)!;
 const debugPanelEl = document.querySelector<HTMLDivElement>('#debug-panel')!;
 const debugBadgeEl = document.querySelector<HTMLButtonElement>('#debug-badge')!;
 const debugStatsEl = document.querySelector<HTMLPreElement>('#debug-stats')!;
@@ -83,27 +92,15 @@ const npcPanelCloseEl = document.querySelector<HTMLButtonElement>('#npc-panel-cl
 const npcStickersListEl = document.querySelector<HTMLDivElement>('#npc-panel-stickers-list')!;
 const npcStickerSectionEl = document.querySelector<HTMLDivElement>('#npc-panel-stickers-section')!;
 
-// Game Master UI selectors
-const gmHelpBadgeEl = document.querySelector<HTMLDivElement>('#gm-help-badge')!;
-const gmPanelEl = document.querySelector<HTMLDivElement>('#gm-panel')!;
-const gmPanelCloseEl = document.querySelector<HTMLButtonElement>('#gm-panel-close')!;
-const gmBtnNpcsEl = document.querySelector<HTMLButtonElement>('#gm-btn-npcs')!;
-const gmBtnTreesEl = document.querySelector<HTMLButtonElement>('#gm-btn-trees')!;
-const gmBtnCanopiesEl = document.querySelector<HTMLButtonElement>('#gm-btn-canopies')!;
-const gmBtnLakeEl = document.querySelector<HTMLButtonElement>('#gm-btn-lake')!;
-const gmBtnAllEl = document.querySelector<HTMLButtonElement>('#gm-btn-all')!;
-const gmBtnSpawnMosquitoEl = document.querySelector<HTMLButtonElement>('#gm-btn-spawn-mosquito')!;
-const gmBtnSpawnBarataEl = document.querySelector<HTMLButtonElement>('#gm-btn-spawn-barata')!;
-const gmBtnSpawnPomboEl = document.querySelector<HTMLButtonElement>('#gm-btn-spawn-pombo')!;
-const gmBtnSpawnBossEl = document.querySelector<HTMLButtonElement>('#gm-btn-spawn-boss')!;
-const gmBtnClearMosquitosEl = document.querySelector<HTMLButtonElement>('#gm-btn-clear-mosquitos')!;
-
-// Builder Mode UI selectors
-const gmBtnToggleBuildEl = document.querySelector<HTMLButtonElement>('#gm-btn-toggle-build')!;
-const gmSelectBuildTypeEl = document.querySelector<HTMLSelectElement>('#gm-select-build-type')!;
-const builderStatusEl = document.querySelector<HTMLDivElement>('#builder-status')!;
-const builderStatusItemEl = document.querySelector<HTMLElement>('#builder-status-item')!;
-const gmPlacedListEl = document.querySelector<HTMLDivElement>('#gm-placed-list')!;
+// Game Master UI selectors (badge/panel/builder tab are now components — see
+// ui/controllers/gm-controller.ts; the sound & permissions tabs stay legacy
+// light-DOM markup, slotted into <gm-panel>, until PLAN-UI.md Phase 1b/1c)
+const gmHelpBadgeEl = document.querySelector<GmBadge>('#gm-help-badge')!;
+const gmPanelEl = document.querySelector<GmPanel>('#gm-panel')!;
+const gmBuilderTabEl = document.querySelector<GmBuilderTab>('#gm-builder-tab')!;
+const gmSoundTabEl = document.querySelector<GmSoundTab>('#gm-sound-tab')!;
+const gmPermissionsTabEl = document.querySelector<GmPermissionsTab>('#gm-permissions-tab')!;
+const builderStatusEl = document.querySelector<BuilderStatus>('#builder-status')!;
 
 initDebugPanel(debugLogEl, debugStatsEl);
 
@@ -446,20 +443,6 @@ let myName = '';
 let openPost: HubPost | null = null;
 let guestbookOpen = false;
 let openNpc: NpcDef | null = null;
-let gmPanelOpen = false;
-type BuildType =
-  | 'tree'
-  | 'canopy'
-  | 'rock'
-  | 'plank'
-  | 'lily'
-  | 'npc:robot'
-  | 'npc:joker'
-  | 'npc:romance'
-  | 'npc:vendor'
-  | 'monster:mosquito'
-  | 'monster:barata'
-  | 'monster:pombo';
 let currentBuildType: BuildType = 'tree';
 let builderModeActive = false;
 const gmPlacedObjects: THREE.Object3D[] = [];
@@ -583,10 +566,11 @@ const combat: CombatManager = new CombatManager({
     !combat.isDead &&
     !chatInputOpen &&
     !addPostOpen &&
-    !gmPanelOpen &&
+    !gmController.isOpen &&
     !openPost &&
     !openNpc,
-  canSwitch: () => connected && controls.isLocked && !chatInputOpen && !addPostOpen && !gmPanelOpen,
+  canSwitch: () =>
+    connected && controls.isLocked && !chatInputOpen && !addPostOpen && !gmController.isOpen,
   velocity,
   onRespawn: () => {
     controls.object.position.set(0, 1.7, 8);
@@ -656,7 +640,7 @@ joinFormEl.addEventListener('submit', (e) => {
       quickPlayBtnEl.classList.add('hidden');
       joinStatusEl.textContent = '';
       resumeBlockEl.classList.remove('hidden');
-      gmHelpBadgeEl.classList.remove('hidden');
+      gmHelpBadgeEl.hidden = false;
       requestLock();
 
       // Listen for other players placing/removing objects in real-time
@@ -786,7 +770,7 @@ window.addEventListener('keydown', (e) => {
   if (openPost) closePostPanel();
   if (openNpc) closeNpcPanel();
   if (addPostOpen) closeAddPostForm();
-  if (gmPanelOpen) closeGmPanel();
+  if (gmController.isOpen) gmController.close();
   if (guestbookOpen) closeGuestbookPanel();
   resumeAfterUI();
 });
@@ -902,45 +886,6 @@ function closeAddPostForm() {
   postBodyInputEl.blur();
 }
 
-function openGmPanel() {
-  gmPanelOpen = true;
-  Object.keys(keys).forEach((code) => (keys[code] = false));
-  gmPanelEl.classList.remove('hidden');
-  velocity.set(0, 0, 0);
-  releasePointerForUI();
-  ghostGroup.visible = false; // Hide ghost when menu is open
-  updatePlacedObjectsList();
-
-  const activeTabBtn = document.querySelector('.gm-tab-btn.active');
-  const activeTab = activeTabBtn ? activeTabBtn.getAttribute('data-tab') : '';
-  if (activeTab === 'permissions') {
-    refreshGmPermissionsTab();
-  }
-
-  log('info', 'GM builder panel opened');
-}
-
-function closeGmPanel() {
-  gmPanelOpen = false;
-  gmPanelEl.classList.add('hidden');
-  log('info', 'GM builder panel closed');
-}
-
-gmHelpBadgeEl.addEventListener('click', () => {
-  if (!connected || chatInputOpen || addPostOpen || openPost || openNpc) return;
-  if (gmPanelOpen) {
-    closeGmPanel();
-    resumeAfterUI();
-  } else {
-    openGmPanel();
-  }
-});
-
-gmPanelCloseEl.addEventListener('click', () => {
-  closeGmPanel();
-  resumeAfterUI();
-});
-
 // --- Builder Mode: Minecraft-style placement & raycasting preview --------------
 
 const ghostGroup = new THREE.Group();
@@ -1027,86 +972,39 @@ function updateGhostVisual() {
 }
 
 function updatePlacedObjectsList() {
-  gmPlacedListEl.innerHTML = '';
-
-  if (gmPlacedObjects.length === 0) {
-    const emptyEl = document.createElement('p');
-    emptyEl.className = 'empty-list-text';
-    emptyEl.textContent = 'Nenhum objeto colocado ainda.';
-    gmPlacedListEl.appendChild(emptyEl);
-    return;
-  }
-
-  const emojiMap: Record<BuildType, string> = {
-    tree: '🌳 Árvore',
-    canopy: '☀️ Tenda Solar',
-    rock: '🪨 Rocha',
-    plank: '🪵 Bloco de Madeira',
-    lily: '🪷 Vitória Régia',
-    'npc:robot': '🤖 Robô da Net',
-    'npc:joker': '🃏 Coringa do Feirão',
-    'npc:romance': '💘 Cupido Solarpunk',
-    'npc:vendor': '🧺 Dona Jurema da Feira',
-    'monster:mosquito': '🦟 Spawn: Mosquito',
-    'monster:barata': '🪳 Spawn: Barata',
-    'monster:pombo': '🕊️ Spawn: Pombo',
-  };
-
-  const sortedObjs = [...gmPlacedObjects].sort((a, b) => {
-    const distA = camera.position.distanceTo(a.position);
-    const distB = camera.position.distanceTo(b.position);
-    return distA - distB;
-  });
-
-  sortedObjs.forEach((obj) => {
-    const type = (obj.userData.type || 'tree') as BuildType;
-    const nameLabel = emojiMap[type] || type;
-    const coordsStr = `(${obj.position.x.toFixed(1)}, ${obj.position.z.toFixed(1)})`;
-    const dist = camera.position.distanceTo(obj.position);
-    const distStr = `${dist.toFixed(1)}m`;
-
-    const itemEl = document.createElement('div');
-    itemEl.className = 'gm-placed-item';
-
-    const detailsEl = document.createElement('div');
-    detailsEl.className = 'gm-placed-item-details';
-
-    const labelEl = document.createElement('span');
-    labelEl.textContent = nameLabel;
-    detailsEl.appendChild(labelEl);
-
-    const coordsEl = document.createElement('span');
-    coordsEl.className = 'gm-placed-item-coords';
-    coordsEl.textContent = `${coordsStr} · dist: ${distStr}`;
-    detailsEl.appendChild(coordsEl);
-
-    itemEl.appendChild(detailsEl);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'gm-placed-item-delete';
-    deleteBtn.textContent = 'Remover';
-    deleteBtn.type = 'button';
-
-    deleteBtn.addEventListener('click', () => {
-      const idToDelete = obj.name;
-      scene.remove(obj);
-      disposeObject3D(obj);
-      const idx = gmPlacedObjects.indexOf(obj);
-      if (idx !== -1) gmPlacedObjects.splice(idx, 1);
-
-      // Also tell npcManager to clean it up in case it was an NPC
-      npcManager.removeNpc(idToDelete);
-
-      api.deletePlacedObject(idToDelete).catch((err) => log('error', `failed to delete: ${err}`));
-      network.sendObjectRemoved(idToDelete);
-
-      log('info', `GM broke object ${idToDelete} via list at ${coordsStr}`);
-      updatePlacedObjectsList();
+  const items: PlacedItemView[] = [...gmPlacedObjects]
+    .sort((a, b) => camera.position.distanceTo(a.position) - camera.position.distanceTo(b.position))
+    .map((obj) => {
+      const type = (obj.userData.type || 'tree') as BuildType;
+      const dist = camera.position.distanceTo(obj.position);
+      return {
+        id: obj.name,
+        label: BUILD_TYPE_LABELS[type] || type,
+        coordsStr: `(${obj.position.x.toFixed(1)}, ${obj.position.z.toFixed(1)})`,
+        distStr: `${dist.toFixed(1)}m`,
+      };
     });
+  gmController.setPlacedObjects(items);
+}
 
-    itemEl.appendChild(deleteBtn);
-    gmPlacedListEl.appendChild(itemEl);
-  });
+function deletePlacedObject(id: string) {
+  const obj = gmPlacedObjects.find((o) => o.name === id);
+  if (!obj) return;
+  const coordsStr = `(${obj.position.x.toFixed(1)}, ${obj.position.z.toFixed(1)})`;
+
+  scene.remove(obj);
+  disposeObject3D(obj);
+  const idx = gmPlacedObjects.indexOf(obj);
+  if (idx !== -1) gmPlacedObjects.splice(idx, 1);
+
+  // Also tell npcManager to clean it up in case it was an NPC
+  npcManager.removeNpc(id);
+
+  api.deletePlacedObject(id).catch((err) => log('error', `failed to delete: ${err}`));
+  network.sendObjectRemoved(id);
+
+  log('info', `GM broke object ${id} via list at ${coordsStr}`);
+  updatePlacedObjectsList();
 }
 
 function spawnObjectAt(type: BuildType, pos: THREE.Vector3, id?: string) {
@@ -1178,56 +1076,16 @@ function spawnObjectAt(type: BuildType, pos: THREE.Vector3, id?: string) {
   updatePlacedObjectsList();
 }
 
-gmBtnToggleBuildEl.addEventListener('click', () => {
-  builderModeActive = !builderModeActive;
-  if (builderModeActive) {
-    gmBtnToggleBuildEl.textContent = 'Ativado';
-    gmBtnToggleBuildEl.classList.add('active');
-    builderStatusEl.classList.remove('hidden');
-    updateGhostVisual();
-
-    // Close GM menu and lock mouse to start building
-    closeGmPanel();
-    resumeAfterUI();
-  } else {
-    gmBtnToggleBuildEl.textContent = 'Desativado';
-    gmBtnToggleBuildEl.classList.remove('active');
-    builderStatusEl.classList.add('hidden');
-
-    // Clear ghost visual
-    ghostGroup.visible = false;
-    while (ghostGroup.children.length > 0) {
-      const child = ghostGroup.children[0];
-      ghostGroup.remove(child);
-      if (child instanceof THREE.Mesh) child.geometry?.dispose();
-    }
+// Build-mode toggle and build-type selection are now driven by <gm-builder-tab>
+// events, wired in initGmController() below (see gm-controller.ts).
+function clearGhost() {
+  ghostGroup.visible = false;
+  while (ghostGroup.children.length > 0) {
+    const child = ghostGroup.children[0];
+    ghostGroup.remove(child);
+    if (child instanceof THREE.Mesh) child.geometry?.dispose();
   }
-});
-
-gmSelectBuildTypeEl.addEventListener('change', () => {
-  currentBuildType = gmSelectBuildTypeEl.value as BuildType;
-
-  // Update UI text in status bar
-  const emojiMap: Record<BuildType, string> = {
-    tree: '🌳 Árvore',
-    canopy: '☀️ Tenda Solar',
-    rock: '🪨 Rocha',
-    plank: '🪵 Bloco de Madeira',
-    lily: '🪷 Vitória Régia',
-    'npc:robot': '🤖 Robô da Net',
-    'npc:joker': '🃏 Coringa do Feirão',
-    'npc:romance': '💘 Cupido Solarpunk',
-    'npc:vendor': '🧺 Dona Jurema da Feira',
-    'monster:mosquito': '🦟 Spawn: Mosquito',
-    'monster:barata': '🪳 Spawn: Barata',
-    'monster:pombo': '🕊️ Spawn: Pombo',
-  };
-  builderStatusItemEl.textContent = emojiMap[currentBuildType];
-
-  if (builderModeActive) {
-    updateGhostVisual();
-  }
-});
+}
 
 // Mouse events for placing / breaking
 window.addEventListener('mousedown', (e) => {
@@ -1335,93 +1193,86 @@ function reloadNpcsFromDb() {
     .catch((err) => log('error', `failed to reload NPCs: ${err}`));
 }
 
-gmBtnNpcsEl.addEventListener('click', () => {
-  reloadNpcsFromDb();
-  log('info', 'GM triggered NPCs reload from DB');
-});
+// Battle quick-actions & respawn buttons are now driven by <gm-builder-tab>
+// events (gm-spawn-enemy / gm-spawn-boss / gm-clear-enemies / gm-respawn),
+// wired in initGmController() below.
+function onGmSpawnEnemy(kind: EnemyKind) {
+  network.sendGmSpawnEnemy(kind);
+  log('info', `GM requested ${kind} spawn`);
+}
 
-gmBtnTreesEl.addEventListener('click', () => {
-  clearTrees();
-  spawnTrees();
-  log('info', 'GM triggered Trees respawn');
-});
-
-gmBtnCanopiesEl.addEventListener('click', () => {
-  clearSolarCanopies();
-  spawnSolarCanopies();
-  log('info', 'GM triggered Solar Canopies respawn');
-});
-
-gmBtnLakeEl.addEventListener('click', () => {
-  clearLake();
-  spawnLake();
-  log('info', 'GM triggered Lake & Deck respawn');
-});
-
-gmBtnSpawnMosquitoEl.addEventListener('click', () => {
-  network.sendGmSpawnEnemy('mosquito');
-  log('info', 'GM requested mosquito spawn');
-});
-
-gmBtnSpawnBarataEl.addEventListener('click', () => {
-  network.sendGmSpawnEnemy('barata');
-  log('info', 'GM requested barata spawn');
-});
-
-gmBtnSpawnPomboEl.addEventListener('click', () => {
-  network.sendGmSpawnEnemy('pombo');
-  log('info', 'GM requested pombo spawn');
-});
-
-gmBtnSpawnBossEl.addEventListener('click', () => {
+function onGmSpawnBoss() {
   network.sendGmSpawnBoss();
   log('info', 'GM requested Muriçoca Rainha spawn');
-});
+}
 
-gmBtnClearMosquitosEl.addEventListener('click', () => {
+function onGmClearEnemies() {
   network.sendGmClearEnemies();
   log('info', 'GM requested mosquito clear');
-});
+}
 
-gmBtnAllEl.addEventListener('click', () => {
-  clearTrees();
-  spawnTrees();
-  clearSolarCanopies();
-  spawnSolarCanopies();
-  clearLake();
-  spawnLake();
+function onGmRespawn(target: RespawnTarget) {
+  switch (target) {
+    case 'npcs':
+      reloadNpcsFromDb();
+      log('info', 'GM triggered NPCs reload from DB');
+      break;
+    case 'trees':
+      clearTrees();
+      spawnTrees();
+      log('info', 'GM triggered Trees respawn');
+      break;
+    case 'canopies':
+      clearSolarCanopies();
+      spawnSolarCanopies();
+      log('info', 'GM triggered Solar Canopies respawn');
+      break;
+    case 'lake':
+      clearLake();
+      spawnLake();
+      log('info', 'GM triggered Lake & Deck respawn');
+      break;
+    case 'all':
+      clearTrees();
+      spawnTrees();
+      clearSolarCanopies();
+      spawnSolarCanopies();
+      clearLake();
+      spawnLake();
 
-  // Clean up all GM-placed builder objects
-  gmPlacedObjects.forEach((obj) => {
-    scene.remove(obj);
-    disposeObject3D(obj);
-  });
-  gmPlacedObjects.length = 0;
-  npcManager.destroy();
+      // Clean up all GM-placed builder objects
+      gmPlacedObjects.forEach((obj) => {
+        scene.remove(obj);
+        disposeObject3D(obj);
+      });
+      gmPlacedObjects.length = 0;
+      npcManager.destroy();
 
-  // Clear database, reload defaults for local player and broadcast clear
-  api
-    .clearPlacedObjects()
-    .then(() => {
-      setTimeout(() => {
-        api
-          .listPlacedObjects()
-          .then((objects) => {
-            objects.forEach((obj) => {
-              if (gmPlacedObjects.some((o) => o.name === obj.id)) return;
-              const pos = new THREE.Vector3(obj.x, obj.y, obj.z);
-              spawnObjectAt(obj.type as BuildType, pos, obj.id);
-            });
-            updatePlacedObjectsList();
-          })
-          .catch((err) => log('error', `failed to reload placed objects after clear: ${err}`));
-      }, 100);
-    })
-    .catch((err) => log('error', `failed to clear placed objects: ${err}`));
+      // Clear database, reload defaults for local player and broadcast clear
+      api
+        .clearPlacedObjects()
+        .then(() => {
+          setTimeout(() => {
+            api
+              .listPlacedObjects()
+              .then((objects) => {
+                objects.forEach((obj) => {
+                  if (gmPlacedObjects.some((o) => o.name === obj.id)) return;
+                  const pos = new THREE.Vector3(obj.x, obj.y, obj.z);
+                  spawnObjectAt(obj.type as BuildType, pos, obj.id);
+                });
+                updatePlacedObjectsList();
+              })
+              .catch((err) => log('error', `failed to reload placed objects after clear: ${err}`));
+          }, 100);
+        })
+        .catch((err) => log('error', `failed to clear placed objects: ${err}`));
 
-  network.sendObjectsCleared();
-  log('info', 'GM triggered full world respawn');
-});
+      network.sendObjectsCleared();
+      log('info', 'GM triggered full world respawn');
+      break;
+  }
+}
 
 // Ctrl/Cmd+Enter submits from either field (title or the multi-line body,
 // where plain Enter has to stay a newline) — a keyboard path for players who
@@ -1469,7 +1320,7 @@ window.addEventListener('keydown', (e) => {
     !openPost &&
     !chatInputOpen &&
     !addPostOpen &&
-    !gmPanelOpen
+    !gmController.isOpen
   )
     openChatInput();
   if (
@@ -1478,7 +1329,7 @@ window.addEventListener('keydown', (e) => {
     !openPost &&
     !chatInputOpen &&
     !addPostOpen &&
-    !gmPanelOpen &&
+    !gmController.isOpen &&
     mode === 'hub' &&
     currentHubOwner === myName
   ) {
@@ -1489,18 +1340,18 @@ window.addEventListener('keydown', (e) => {
     connected &&
     !chatInputOpen &&
     !addPostOpen &&
-    !gmPanelOpen &&
+    !gmController.isOpen &&
     !openPost &&
     !openNpc
   ) {
     setChatCompact(!chatCompact);
   }
   if (e.code === 'KeyB' && connected && !chatInputOpen && !addPostOpen && !openPost && !openNpc) {
-    if (gmPanelOpen) {
-      closeGmPanel();
+    if (gmController.isOpen) {
+      gmController.close();
       resumeAfterUI();
     } else {
-      openGmPanel();
+      gmController.open();
     }
   }
 });
@@ -1579,12 +1430,6 @@ function findInteractable(hit: THREE.Object3D, interactables: Interactable[]): I
     obj = obj.parent;
   }
   return null;
-}
-
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 function renderPostPanel(post: HubPost): string {
@@ -1668,12 +1513,12 @@ function closeGuestbookPanel() {
 }
 
 function refreshGmPermissionsTab() {
-  gmHubsPermissionsListEl.innerHTML = '<p class="gm-permissions-empty">Carregando...</p>';
+  gmPermissionsTabEl.setLoading();
 
   api
     .getGMBypass()
     .then((res) => {
-      gmBypassGlobalToggleEl.checked = res.enabled;
+      gmPermissionsTabEl.setBypass(res.enabled);
     })
     .catch((err) => {
       log('error', `Failed to get GM bypass state: ${err}`);
@@ -1683,37 +1528,18 @@ function refreshGmPermissionsTab() {
     .listHubs()
     .then((summaries) => {
       if (summaries.length === 0) {
-        gmHubsPermissionsListEl.innerHTML =
-          '<p class="gm-permissions-empty">Nenhum hub registrado.</p>';
+        gmPermissionsTabEl.setHubs([]);
         return;
       }
       return Promise.all(summaries.map((s) => api.getHub(s.owner)));
     })
     .then((hubs) => {
       if (!hubs) return;
-
-      gmHubsPermissionsListEl.innerHTML = hubs
-        .map((hub) => {
-          const checked = hub.allowVisitorPosts ? 'checked' : '';
-          return `
-            <div class="gm-permissions-row" data-owner="${escapeHtml(hub.owner)}">
-              <div class="gm-permissions-row-info">
-                <span class="gm-permissions-row-owner">🏡 Hub de ${escapeHtml(hub.owner)}</span>
-                <span class="gm-permissions-row-slot">Slot: ${hub.slot} · Tag: ${escapeHtml(hub.tag)}</span>
-              </div>
-              <label class="guestbook-checkbox-label">
-                <input type="checkbox" class="gm-hub-allow-toggle" ${checked} />
-                <span>Permitir recados</span>
-              </label>
-            </div>
-          `;
-        })
-        .join('');
+      gmPermissionsTabEl.setHubs(hubs satisfies HubPermissionRow[]);
     })
     .catch((err) => {
       log('error', `Failed to load GM permissions: ${err}`);
-      gmHubsPermissionsListEl.innerHTML =
-        '<p class="gm-permissions-empty">Erro ao carregar permissões.</p>';
+      gmPermissionsTabEl.setError();
     });
 }
 
@@ -2328,182 +2154,92 @@ function animate(timestamp: number) {
   renderer.render(scene, camera);
 }
 
-// --- Game Master Panel UI Wiring (Tabs, Grid Cards, Audio & Mixer) -----------
+// --- Game Master Panel Controller (badge, panel shell, all 4 tabs) -----------
+// Tab navigation, the builder card grid, the sound mixer/radio player, and the
+// permissions list are all internal to <gm-panel> / <gm-builder-tab> /
+// <gm-sound-tab> / <gm-permissions-tab> now; this wires their events to
+// game/network state (Shortcuts is pure static content, no wiring needed).
+const gmController = initGmController({
+  badge: gmHelpBadgeEl,
+  panel: gmPanelEl,
+  builderTab: gmBuilderTabEl,
+  soundTab: gmSoundTabEl,
+  permissionsTab: gmPermissionsTabEl,
+  builderStatus: builderStatusEl,
 
-// Tab navigation
-const tabButtons = document.querySelectorAll<HTMLButtonElement>('.gm-tab-btn');
-const tabPanes = document.querySelectorAll<HTMLDivElement>('.gm-tab-pane');
+  isConnected: () => connected,
+  isChatInputOpen: () => chatInputOpen,
+  isAddPostOpen: () => addPostOpen,
+  hasOpenPost: () => !!openPost,
+  hasOpenNpc: () => !!openNpc,
 
-tabButtons.forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const tabName = btn.getAttribute('data-tab');
-    tabButtons.forEach((b) => b.classList.remove('active'));
-    tabPanes.forEach((p) => p.classList.remove('active'));
+  resetKeys: () => Object.keys(keys).forEach((code) => (keys[code] = false)),
+  resetVelocity: () => velocity.set(0, 0, 0),
+  releasePointerForUI,
+  resumeAfterUI,
 
-    btn.classList.add('active');
-    const targetPane = document.getElementById(`gm-tab-content-${tabName}`);
-    if (targetPane) targetPane.classList.add('active');
+  isBuilderModeActive: () => builderModeActive,
+  setBuilderModeActive: (active) => {
+    builderModeActive = active;
+  },
+  updateGhostVisual,
+  hideGhost: () => {
+    ghostGroup.visible = false;
+  },
+  clearGhost,
 
-    // Resume context if opening Sound tab
-    if (tabName === 'sound') {
-      RadioManager.getInstance().resume();
+  refreshPlacedList: updatePlacedObjectsList,
+  onPlacedDelete: deletePlacedObject,
+
+  onSpawnEnemy: onGmSpawnEnemy,
+  onSpawnBoss: onGmSpawnBoss,
+  onClearEnemies: onGmClearEnemies,
+  onRespawn: onGmRespawn,
+
+  resumeRadio: () => RadioManager.getInstance().resume(),
+  refreshPermissions: refreshGmPermissionsTab,
+
+  audioSource: {
+    getAnalyser: () => RadioManager.getInstance().analyser,
+    getIsPlaying: () => RadioManager.getInstance().getIsPlaying(),
+  },
+  getPlaybackState: () => {
+    const radio = RadioManager.getInstance();
+    if (radio.getIsPlaying()) {
+      const track = radio.getCurrentTrack();
+      return {
+        isPlaying: true,
+        trackName: track.name,
+        trackGenreLine: `${track.genre} · ${track.tempo} BPM`,
+      };
     }
-    if (tabName === 'permissions') {
-      refreshGmPermissionsTab();
-    }
-  });
+    return {
+      isPlaying: false,
+      trackName: 'Rádio Desativada',
+      trackGenreLine: 'Ligue para começar a relaxar',
+    };
+  },
+  onRadioToggle: () => RadioManager.getInstance().toggleRadio(),
+  onRadioNext: () => RadioManager.getInstance().nextTrack(),
+  onRadioPrev: () => RadioManager.getInstance().prevTrack(),
+  onVolumeChange: (channel: VolumeChannel, value: number) => {
+    const radio = RadioManager.getInstance();
+    if (channel === 'master') radio.setMasterVolume(value);
+    else if (channel === 'sfx') radio.setSfxVolume(value);
+    else radio.setRadioVolume(value);
+  },
+
+  setBuildType: (type) => {
+    currentBuildType = type;
+  },
+
+  onBypassToggle: onGmBypassToggle,
+  onHubPermissionToggle: onGmHubPermissionToggle,
 });
 
-// Builder Grid Cards
-const gridCards = document.querySelectorAll<HTMLDivElement>('.gm-card');
-gridCards.forEach((card) => {
-  card.addEventListener('click', () => {
-    const buildType = card.getAttribute('data-build') as BuildType;
-    if (!buildType) return;
-
-    gridCards.forEach((c) => c.classList.remove('active'));
-    card.classList.add('active');
-
-    // Programmatically update the hidden compatibility select & dispatch change
-    gmSelectBuildTypeEl.value = buildType;
-    gmSelectBuildTypeEl.dispatchEvent(new Event('change'));
-  });
-});
-
-// Volume Mixer Wiring
-const volumeMasterEl = document.getElementById('volume-master') as HTMLInputElement;
-const volumeSfxEl = document.getElementById('volume-sfx') as HTMLInputElement;
-const volumeRadioEl = document.getElementById('volume-radio') as HTMLInputElement;
-
-const volumeMasterValEl = document.getElementById('volume-master-val')!;
-const volumeSfxValEl = document.getElementById('volume-sfx-val')!;
-const volumeRadioValEl = document.getElementById('volume-radio-val')!;
-
-const radio = RadioManager.getInstance();
-
-volumeMasterEl.addEventListener('input', () => {
-  const val = parseInt(volumeMasterEl.value) / 100;
-  radio.setMasterVolume(val);
-  volumeMasterValEl.textContent = `${volumeMasterEl.value}%`;
-});
-
-volumeSfxEl.addEventListener('input', () => {
-  const val = parseInt(volumeSfxEl.value) / 100;
-  radio.setSfxVolume(val);
-  volumeSfxValEl.textContent = `${volumeSfxEl.value}%`;
-});
-
-volumeRadioEl.addEventListener('input', () => {
-  const val = parseInt(volumeRadioEl.value) / 100;
-  radio.setRadioVolume(val);
-  volumeRadioValEl.textContent = `${volumeRadioEl.value}%`;
-});
-
-// Radio Players Wiring
-const radioBtnPrev = document.getElementById('radio-btn-prev') as HTMLButtonElement;
-const radioBtnPlay = document.getElementById('radio-btn-play') as HTMLButtonElement;
-const radioBtnNext = document.getElementById('radio-btn-next') as HTMLButtonElement;
-
-const radioTrackName = document.getElementById('radio-track-name')!;
-const radioTrackGenre = document.getElementById('radio-track-genre')!;
-
-const radioVisualizerCanvas = document.getElementById('radio-visualizer') as HTMLCanvasElement;
-const radioVisualizerCtx = radioVisualizerCanvas.getContext('2d')!;
-
-function updateRadioUI() {
-  if (radio.getIsPlaying()) {
-    radioBtnPlay.textContent = '⏸️ Pausar';
-    radioBtnPlay.classList.add('play-btn');
-    const track = radio.getCurrentTrack();
-    radioTrackName.textContent = track.name;
-    radioTrackGenre.textContent = `${track.genre} · ${track.tempo} BPM`;
-  } else {
-    radioBtnPlay.textContent = '▶️ Ligar';
-    radioBtnPlay.classList.remove('play-btn');
-    radioTrackName.textContent = 'Rádio Desativada';
-    radioTrackGenre.textContent = 'Ligue para começar a relaxar';
-  }
-}
-
-radioBtnPlay.addEventListener('click', () => {
-  radio.toggleRadio();
-  updateRadioUI();
-});
-
-radioBtnNext.addEventListener('click', () => {
-  radio.nextTrack();
-  updateRadioUI();
-});
-
-radioBtnPrev.addEventListener('click', () => {
-  radio.prevTrack();
-  updateRadioUI();
-});
-
-// Audio Visualizer Draw Loop
-function drawVisualizer() {
-  requestAnimationFrame(drawVisualizer);
-
-  // Clear background
-  radioVisualizerCtx.fillStyle = '#060907';
-  radioVisualizerCtx.fillRect(0, 0, radioVisualizerCanvas.width, radioVisualizerCanvas.height);
-
-  if (!radio.getIsPlaying() || !radio.analyser) {
-    // Draw idle wave
-    radioVisualizerCtx.strokeStyle = 'rgba(129, 178, 154, 0.25)';
-    radioVisualizerCtx.lineWidth = 2;
-    radioVisualizerCtx.beginPath();
-    radioVisualizerCtx.moveTo(0, radioVisualizerCanvas.height / 2);
-    for (let i = 0; i < radioVisualizerCanvas.width; i++) {
-      const y =
-        radioVisualizerCanvas.height / 2 + Math.sin(i * 0.05 + performance.now() * 0.003) * 2;
-      radioVisualizerCtx.lineTo(i, y);
-    }
-    radioVisualizerCtx.stroke();
-    return;
-  }
-
-  const analyser = radio.analyser;
-  const bufferLength = analyser.frequencyBinCount;
-  const dataArray = new Uint8Array(bufferLength);
-  analyser.getByteFrequencyData(dataArray);
-
-  const barWidth = (radioVisualizerCanvas.width / bufferLength) * 1.6;
-  let barHeight;
-  let x = 0;
-
-  for (let i = 0; i < bufferLength; i++) {
-    barHeight = dataArray[i] * 0.22; // scale height
-
-    // Beautiful gradient
-    const grad = radioVisualizerCtx.createLinearGradient(0, radioVisualizerCanvas.height, 0, 0);
-    grad.addColorStop(0, '#4a8a4f');
-    grad.addColorStop(0.5, '#81b29a');
-    grad.addColorStop(1, '#ffcf5c');
-
-    radioVisualizerCtx.fillStyle = grad;
-    // Symmetrical visualizer centering
-    radioVisualizerCtx.fillRect(
-      radioVisualizerCanvas.width / 2 + x,
-      radioVisualizerCanvas.height - barHeight,
-      barWidth - 2,
-      barHeight
-    );
-    radioVisualizerCtx.fillRect(
-      radioVisualizerCanvas.width / 2 - x - barWidth,
-      radioVisualizerCanvas.height - barHeight,
-      barWidth - 2,
-      barHeight
-    );
-
-    x += barWidth;
-  }
-}
-drawVisualizer();
-
-// --- GM Permissions Tab Listeners ---
-gmBypassGlobalToggleEl.addEventListener('change', () => {
-  const enabled = gmBypassGlobalToggleEl.checked;
+// GM permissions tab actions are now driven by <gm-permissions-tab> events,
+// wired in initGmController() above.
+function onGmBypassToggle(enabled: boolean) {
   api
     .setGMBypass(enabled)
     .then((res) => {
@@ -2512,19 +2248,9 @@ gmBypassGlobalToggleEl.addEventListener('change', () => {
     .catch((err) => {
       log('error', `Failed to set GM Bypass Global: ${err}`);
     });
-});
+}
 
-gmHubsPermissionsListEl.addEventListener('change', (e) => {
-  const checkbox = e.target as HTMLInputElement;
-  if (!checkbox || !checkbox.classList.contains('gm-hub-allow-toggle')) return;
-
-  const row = checkbox.closest('.gm-permissions-row');
-  if (!row) return;
-
-  const owner = row.getAttribute('data-owner');
-  if (!owner) return;
-
-  const allowed = checkbox.checked;
+function onGmHubPermissionToggle(owner: string, allowed: boolean) {
   api
     .updateHubSettings(owner, allowed)
     .then((res) => {
@@ -2535,7 +2261,7 @@ gmHubsPermissionsListEl.addEventListener('change', (e) => {
     .catch((err) => {
       log('error', `GM failed to update settings for ${owner}: ${err}`);
     });
-});
+}
 
 log(
   'info',

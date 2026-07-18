@@ -1,0 +1,17 @@
+/* Self-hosted variable fonts — see DESIGN.md §3. No CDN, no third-party
+   requests: preserves the $0-infra target and works offline in dev. */
+@font-face {
+  font-family: 'Oxanium';
+  src: url('/fonts/oxanium-latin-variable.woff2') format('woff2');
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-latin-variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

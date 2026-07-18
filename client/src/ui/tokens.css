@@ -1,0 +1,64 @@
+/* Design tokens — see DESIGN.md §2. Custom properties inherit into shadow
+   roots, so components consume these directly and never redeclare them. */
+:root {
+  /* Color palette: dark moody Brazilian spectrum */
+  --color-bg-base: #0b0f12;
+  --color-bg-surface: #131a1f;
+  --color-bg-elevated: #1c262e;
+
+  --color-brand-primary: #ffc542;
+  --color-brand-green: #10b981;
+  --color-brand-blue: #3b82f6;
+
+  --color-text-primary: #f3f4f6;
+  --color-text-secondary: #9ca3af;
+  --color-text-disabled: #4b5563;
+
+  /* Semantic states */
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+  --color-hud-health: #10b981;
+  --color-hud-shield: #3b82f6;
+  --color-hud-xp: #ffc542;
+
+  /* Borders & glows */
+  --border-radius-sm: 6px;
+  --border-radius-md: 12px;
+  --border-radius-lg: 20px;
+  --border-ui-glow: 0px 0px 12px rgba(255, 197, 66, 0.15);
+  --border-ui-stroke: 1px solid rgba(255, 255, 255, 0.08);
+  --focus-ring: 0 0 0 2px rgba(255, 197, 66, 0.55);
+
+  /* Typography */
+  --font-display: 'Oxanium', 'Inter', sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  /* Fluid type scale — fluidity lives here, not in the root font-size
+     (root clamp() is deferred until legacy rem-sized CSS is fully migrated) */
+  --text-xs: clamp(0.68rem, 0.62rem + 0.25vw, 0.78rem);
+  --text-sm: clamp(0.8rem, 0.74rem + 0.3vw, 0.92rem);
+  --text-md: clamp(0.95rem, 0.88rem + 0.35vw, 1.1rem);
+  --text-lg: clamp(1.15rem, 1.05rem + 0.5vw, 1.4rem);
+  --text-xl: clamp(1.4rem, 1.25rem + 0.8vw, 1.9rem);
+  --text-2xl: clamp(1.8rem, 1.55rem + 1.2vw, 2.6rem);
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* Motion */
+  --transition-fast: 0.15s ease;
+
+  /* Layering */
+  --z-hud: 10;
+  --z-chat: 50;
+  --z-panel: 100;
+  --z-overlay: 500;
+  --z-debug: 1000;
+}
