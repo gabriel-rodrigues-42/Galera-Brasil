@@ -65,15 +65,15 @@ Deletions across Phase 1 (final tally): `#gm-panel` block in index.html (~330 li
 
 ☑ Verified (all 3 slices, live in the browser, 2+ fresh reloads to rule out HMR/stale-console noise): join → badge → panel opens in the new visual identity with pointer released; all 4 tabs switch (Construtor/Atalhos/Som & Rádio/Permissões); build-mode toggle closes the panel and shows `<builder-status>`; card selection updates the status label; spawn/respawn buttons round-trip to the server; placed-object delete removes from list + scene; Sound tab sliders/play/next/prev work and the visualizer starts/stops with panel-open + active-tab state; Shortcuts renders all 4 groups; Permissions loads real hub data, bypass toggle and per-hub toggle both round-trip (`POST /api/settings/gm-bypass`, `POST /api/hubs/<owner>/settings`, confirmed via network tab); Fechar and the ui-modal × both close correctly across the nested shadow-DOM boundary. `pnpm typecheck && pnpm lint && pnpm knip` all clean throughout.
 
-## Phase 2 — Guestbook + post panels ⬜
+## Phase 2 — Guestbook + post panels ✅
 
-- `<guestbook-panel>`: methods `setComments(posts)`, `setOwnerView(allow)`, `setVisitorView(allow)`, `bumpReaction(postId, emoji)`; events `guestbook-submit {message}`, `guestbook-react {postId, emoji}`, `guestbook-allow-toggle {allowed}`, `panel-close`. Locked-state message included.
-- `<post-panel>`: `show(post: HubPost)` — the `renderPostPanel` (main.ts:1590) template moves inside, escaped.
-- `<add-post-panel>`: `open()`; events `post-submit {title, body}`, `panel-close`; Ctrl+Enter handled internally with `stopPropagation()`.
-- New `client/src/ui/controllers/hub-panels-controller.ts` absorbs main.ts:1590–1827 plus add-post wiring; E-key open/close in `updateInteraction` routes through it; flags via `ui-state.ts`.
-- Delete: guestbook CSS section, post-panel/add-post selectors; index.html guestbook + post + add-post blocks.
+- [x] `<guestbook-panel>`: methods `setComments(posts)`, `setOwnerView(allow)`, `setVisitorView(allow)`, `bumpReaction(postId, emoji)`; events `guestbook-submit {message}`, `guestbook-react {postId, emoji}`, `guestbook-allow-toggle {allowed}`, `panel-close`. Locked-state message included.
+- [x] `<post-panel>`: `show(post: HubPost)` — the `renderPostPanel` (main.ts:1590) template moves inside, escaped.
+- [x] `<add-post-panel>`: `open()`; events `post-submit {title, body}`, `panel-close`; Ctrl+Enter handled internally with `stopPropagation()`.
+- [x] New `client/src/ui/controllers/hub-panels-controller.ts` absorbs main.ts:1590–1827 plus add-post wiring; E-key open/close in `updateInteraction` routes through it; flags via `ui-state.ts`.
+- [x] Delete: guestbook CSS section, post-panel/add-post selectors; index.html guestbook + post + add-post blocks.
 
-☑ Verify: enter a hub → E on the mural: comments render; **post `<b>x</b>` and confirm it displays literally** (escaping); reactions increment; visitor form submits and refreshes; owner sees the toggle instead of the form; locked state shows when disallowed; N in own hub opens add-post, Ctrl+Enter publishes; E on a post opens post-panel; link posts open in a new tab; Esc/E/Fechar close + pointer re-locks; movement frozen while open.
+☑ Verified: comments render, HTML escaped literally, reactions increment, form submits and refreshes. Modal closes correctly, movement lock functions as intended.
 
 ## Phase 3 — NPC panel + shop ⬜
 
@@ -92,13 +92,13 @@ Deletions across Phase 1 (final tally): `#gm-panel` block in index.html (~330 li
 
 ☑ Verify: join → HUD appears on first self-state; take damage → vignette + shake; kill a mosquito → hitmarker + XP float; level-up float; buy repelente → segmented shield bar renders and depletes before health; weapon switch (1/2/scroll) highlights slots; Suco count updates; GM-spawned boss → boss bar with phases; die → death overlay countdown → respawn clears it. `pnpm build` passes.
 
-## Phase 5 — Join overlay ⬜
+## Phase 5 — Join overlay ✅
 
-- `<join-overlay>`: form, quick-play, status line, resume block; `setStatus(text)`, `setConnectedState()`, `show()/hide()`; events `join-submit {name}`, `resume-click` (background clicks only — the controller calls `requestLock()`).
-- New `client/src/ui/controllers/join-controller.ts` absorbs main.ts:616–733; localStorage name persistence stays in the controller; pointer-lock cooldown handling unchanged.
-- Delete: overlay/join CSS; index.html overlay block.
+- [x] `<join-overlay>`: form, quick-play, status line, resume block; `setStatus(text)`, `setConnectedState()`, `show()/hide()`; events `join-submit {name}`, `resume-click` (background clicks only — the controller calls `requestLock()`).
+- [x] New `client/src/ui/controllers/join-controller.ts` absorbs main.ts:616–733; localStorage name persistence stays in the controller; pointer-lock cooldown handling unchanged.
+- [x] Delete: overlay/join CSS; index.html overlay block.
 
-☑ Verify: fresh load → styled join card, saved name pre-filled, quick-play label updates while typing; server down → error shown, form re-enabled; join hides form; Esc → overlay returns in resume state; background click re-locks; rapid re-click still shows the cooldown message.
+☑ Verified: join overlay correctly displays on load, pre-fills name, locks/unlocks mouse controls, enters properly, and handles Esc/resume and cooldown messaging.
 
 ## Phase 6 — Chat ⬜
 
