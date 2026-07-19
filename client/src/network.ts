@@ -288,13 +288,19 @@ export class Network {
       this.onDebrisRemove(debrisId);
     });
 
-    this._room.onStateChange((s: any) => {
-      if (s.gameState !== undefined) this.onGameStateChange(s.gameState);
-      if (s.gameTimer !== undefined) this.onGameTimerChange(s.gameTimer);
-      if (s.meetingState !== undefined) this.onMeetingStateChange(s.meetingState);
-      if (s.meetingTimer !== undefined) this.onMeetingTimerChange(s.meetingTimer);
-      if (s.blackoutTimer !== undefined) this.onBlackoutTimerChange(s.blackoutTimer);
-    });
+    // `room.onStateChange` fires on every server patch tick regardless of
+    // which fields actually changed (any player moving, any enemy AI tick,
+    // etc. — many times a second even when idle), which was re-invoking
+    // these callbacks — including onMeetingStateChange, which re-acquires
+    // pointer lock via resumeGame() whenever meetingState is 'none' — on
+    // every tick, silently re-locking the pointer (and hiding the cursor)
+    // moments after any UI panel released it. `listen` only fires when the
+    // named field's value actually changes, like every other watcher here.
+    $(state).listen('gameState', (value: string) => this.onGameStateChange(value));
+    $(state).listen('gameTimer', (value: number) => this.onGameTimerChange(value));
+    $(state).listen('meetingState', (value: string) => this.onMeetingStateChange(value));
+    $(state).listen('meetingTimer', (value: number) => this.onMeetingTimerChange(value));
+    $(state).listen('blackoutTimer', (value: number) => this.onBlackoutTimerChange(value));
 
     // Replay whatever was already in the plaza when we arrived. The initial
     // full state isn't guaranteed to be decoded yet at the instant join()
