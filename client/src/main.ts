@@ -819,17 +819,37 @@ gameController.init();
 // cooldown after exiting a lock — SecurityError if you re-click too soon)
 // surfaces only as an unhandled rejection. Call requestPointerLock ourselves
 // so we can catch it and give the player visible feedback instead.
+//
+// This cooldown reliably fires when a UI panel is closed shortly after being
+// opened (opening one already exits pointer lock, starting the cooldown —
+// closing it via Escape is the fastest way to land inside that window). The
+// old fallback wrote a status message onto the join overlay, which stays
+// hidden for the entire rest of the session after the first successful
+// lock — so the message was invisible and the game was left looking dead:
+// modal gone, cursor free, camera unresponsive, nothing telling the player
+// why. Show a real on-screen hint instead and retry on their next click.
+let awaitingResumeClick = false;
+
 function requestLock() {
   canvas.requestPointerLock().catch((err: DOMException) => {
     log('warn', `pointer lock request rejected: ${err.name} — ${err.message}`);
     if (err.name === 'SecurityError') {
       joinController.setStatus('Aguarde um instante e clique novamente.');
+      hintEl.setText('Clique para continuar');
+      awaitingResumeClick = true;
       setTimeout(() => {
         joinController.setStatus('');
       }, 2000);
     }
   });
 }
+
+canvas.addEventListener('click', () => {
+  if (!awaitingResumeClick) return;
+  awaitingResumeClick = false;
+  hintEl.setText('');
+  requestLock();
+});
 
 // Some UI panels (the post-detail view, the add-post form) have real
 // clickable elements — but the mouse is captured for camera-look the whole
@@ -890,6 +910,32 @@ controls.addEventListener('unlock', () => {
     log('info', 'pointer lock released for a UI panel (cursor visible, panel stays open)');
     return;
   }
+
+  const aPanelIsOpen =
+    hubPanelsController.isPostOpen ||
+    hubPanelsController.isGuestbookOpen ||
+    hubPanelsController.isAddPostOpen ||
+    npcPanelController.isOpen ||
+    gmController.isOpen;
+
+  if (aPanelIsOpen) {
+    // A panel-driven release is never supposed to fall back to the
+    // start-screen overlay (see releasePointerForUI above). If the browser
+    // force-unlocked anyway — e.g. its own Escape-exits-pointer-lock policy
+    // racing our own resumeAfterUI() re-lock attempt when a panel is closed
+    // via Escape — recover the same way a rejected requestLock() does
+    // (click to resume) instead of popping the start screen over an open
+    // panel, which used to look like "Esc opens the main menu".
+    hud.setCrosshairLocked(false);
+    hintEl.setText('Clique para continuar');
+    awaitingResumeClick = true;
+    log(
+      'info',
+      'pointer lock RELEASED unexpectedly while a panel is open — awaiting a click to resume'
+    );
+    return;
+  }
+
   overlay.classList.remove('hidden');
   document.body.classList.remove('locked');
   hud.setCrosshairLocked(false);
